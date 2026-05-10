@@ -1,7 +1,7 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
-import { createRoom, addParticipant, type CreateRoomResponse, type Recommendation } from "../lib/api";
+import { createRoom, addParticipant, listRooms, type CreateRoomResponse, type Recommendation, type RoomSummary } from "../lib/api";
 import { Button, Textarea, Spinner, CapToggle, ScoreBar, ModelAvatar, ModelTag, modelTheme, cn } from "../components/ui";
 
 interface SelectedCaps { web_search: boolean; thinking: boolean; fast_mode: boolean; }
@@ -11,14 +11,32 @@ function fromRec(r: Recommendation): Selection {
   return { model_id: r.model_id, display_name: r.display_name, caps: r.suggested_capabilities, score: r.reputation_score, reason: r.reason };
 }
 
+const CAT_LABEL: Record<string, string> = {
+  technology: "Technology", science: "Science", philosophy: "Philosophy",
+  politics: "Politics", economics: "Economics", general: "General",
+};
+
 export function Landing() {
   const [q, setQ] = useState("");
   const [step, setStep] = useState<"idle" | "loading" | "selecting" | "starting">("idle");
   const [room, setRoom] = useState<CreateRoomResponse | null>(null);
   const [selections, setSelections] = useState<Selection[]>([]);
   const [error, setError] = useState("");
+  const [prevRooms, setPrevRooms] = useState<RoomSummary[]>([]);
   const navigate = useNavigate();
   const { getToken } = useAuth();
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = await getToken();
+        const rooms = await listRooms(token ?? undefined);
+        setPrevRooms(rooms);
+      } catch {
+        // silently ignore — user just won't see history
+      }
+    })();
+  }, []);
 
   async function analyze(e: FormEvent) {
     e.preventDefault();
@@ -75,7 +93,7 @@ export function Landing() {
           </span>
         </div>
 
-        <div className="flex flex-1 items-center justify-center px-4">
+        <div className="flex flex-1 items-center justify-center px-4 py-12">
           <div className="w-full max-w-xl">
             <div className="mb-8 space-y-1">
               <h2 className="text-2xl font-bold text-gray-900">What do you want to discuss?</h2>
@@ -108,6 +126,51 @@ export function Landing() {
             </div>
           </div>
         </div>
+
+        {/* Previous rooms */}
+        {prevRooms.length > 0 && (
+          <div className="border-t border-gray-100 bg-gray-50 px-4 py-6 sm:px-8">
+            <div className="mx-auto max-w-xl">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-gray-400">Recent Discussions</p>
+              <div className="space-y-2">
+                {prevRooms.slice(0, 6).map((r) => (
+                  <button
+                    key={r.room_id}
+                    onClick={() => navigate(`/room/${r.room_id}`)}
+                    className="w-full flex items-start justify-between gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-left hover:border-gray-300 hover:shadow-sm transition-all"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">"{r.question}"</p>
+                      <div className="mt-1 flex items-center gap-2">
+                        <span className="text-[11px] text-gray-400">{CAT_LABEL[r.category] ?? r.category}</span>
+                        <span className="text-gray-200">·</span>
+                        <div className="flex items-center gap-1">
+                          {r.models.slice(0, 3).map((id) => (
+                            <ModelAvatar key={id} modelId={id} size="xs" />
+                          ))}
+                          {r.models.length > 3 && (
+                            <span className="text-[11px] text-gray-400">+{r.models.length - 3}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0 flex flex-col items-end gap-1">
+                      <span className={cn(
+                        "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                        r.status === "ended" ? "bg-gray-100 text-gray-400" : "bg-green-50 text-green-700"
+                      )}>
+                        {r.status === "ended" ? "Ended" : "Active"}
+                      </span>
+                      <span className="text-[11px] text-gray-400">
+                        {new Date(r.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }

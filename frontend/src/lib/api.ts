@@ -114,6 +114,23 @@ export async function getAvailableModels(roomId: string, token?: string): Promis
   return res.json();
 }
 
+export interface RoomSummary {
+  room_id: string;
+  question: string;
+  category: string;
+  status: string;
+  created_at: string;
+  overall_rating: number | null;
+  models: string[];
+  participant_count: number;
+}
+
+export async function listRooms(token?: string): Promise<RoomSummary[]> {
+  const res = await fetch(`${BASE}/rooms`, { headers: headers(token) });
+  if (!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+
 export async function getMessages(roomId: string, token?: string): Promise<object[]> {
   const res = await fetch(`${BASE}/room/${roomId}/messages`, { headers: headers(token) });
   if (!res.ok) throw new Error(await res.text());

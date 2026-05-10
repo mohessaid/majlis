@@ -228,6 +228,38 @@ async def end_room(
     }
 
 
+@router.get("/rooms")
+async def list_rooms(
+    session: Session = Depends(get_session),
+    user_id: str = Depends(get_current_user),
+):
+    """List all rooms created by the current user, newest first."""
+    stmt = (
+        select(Room)
+        .where(Room.user_id == user_id)
+        .order_by(Room.created_at.desc())
+        .limit(20)
+    )
+    rooms = session.exec(stmt).all()
+
+    result = []
+    for room in rooms:
+        participants_stmt = select(Participant).where(Participant.room_id == room.id)
+        participants = session.exec(participants_stmt).all()
+        result.append({
+            "room_id": room.id,
+            "question": room.question,
+            "category": room.category,
+            "status": room.status,
+            "created_at": room.created_at.isoformat(),
+            "overall_rating": room.overall_rating,
+            "models": list({p.model_id for p in participants}),
+            "participant_count": len([p for p in participants if p.dismissed_at is None]),
+        })
+
+    return result
+
+
 @router.get("/room/{room_id}")
 async def get_room(
     room_id: str,
