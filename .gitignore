@@ -1,0 +1,29 @@
+# Secrets
+.env
+*.env.local
+
+# SSL certs (generated on server, never committed)
+ssl/
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+*.db
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.env.local
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,225 @@
+# Majlis — AMD MI300X Production Deployment
+#
+# GPU: AMD MI300X (192 GB HBM3)
+# Each vLLM instance runs on the same GPU using separate VRAM partitions.
+# 5 x 8B models in float16 ≈ 80 GB total — well within 192 GB limit.
+#
+# Start order: curator first (needed for health check) → discussion models → backend → nginx
+
+x-vllm-common: &vllm-common
+  image: rocm/vllm:rocm7.12.0_gfx94X-dcgpu_ubuntu24.04_py3.12_pytorch_2.9.1_vllm_0.16.0
+  restart: unless-stopped
+  shm_size: "16gb"
+  devices:
+    - "/dev/kfd"
+    - "/dev/dri"
+  group_add:
+    - video
+    - render
+  volumes:
+    - hf_cache:/root/.cache/huggingface
+  environment:
+    - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
+    - PYTORCH_HIP_ALLREDUCE_TIMEOUT=180
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "100m"
+      max-file: "3"
+
+services:
+
+  # ── Curator (0.5B — tiny, starts fast) ────────────────────────────────────
+  vllm-curator:
+    <<: *vllm-common
+    container_name: majlis-vllm-curator
+    command: >
+      python -m vllm.entrypoints.openai.api_server
+      --model Qwen/Qwen2.5-0.5B-Instruct
+      --host 0.0.0.0
+      --port 8005
+      --max-model-len 4096
+      --dtype float16
+      --gpu-memory-utilization 0.05
+      --served-model-name curator
+    ports:
+      - "127.0.0.1:8005:8005"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8005/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+  # ── Llama 3.1 8B ──────────────────────────────────────────────────────────
+  vllm-llama:
+    <<: *vllm-common
+    container_name: majlis-vllm-llama
+    command: >
+      python -m vllm.entrypoints.openai.api_server
+      --model meta-llama/Llama-3.1-8B-Instruct
+      --host 0.0.0.0
+      --port 8001
+      --max-model-len 8192
+      --dtype float16
+      --gpu-memory-utilization 0.20
+      --served-model-name llama-3.1-8b
+    ports:
+      - "127.0.0.1:8001:8001"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 15
+      start_period: 180s
+
+  # ── Qwen 2.5 7B ───────────────────────────────────────────────────────────
+  vllm-qwen:
+    <<: *vllm-common
+    container_name: majlis-vllm-qwen
+    command: >
+      python -m vllm.entrypoints.openai.api_server
+      --model Qwen/Qwen2.5-7B-Instruct
+      --host 0.0.0.0
+      --port 8002
+      --max-model-len 8192
+      --dtype float16
+      --gpu-memory-utilization 0.20
+      --enable-prefix-caching
+      --served-model-name qwen2.5-7b
+    ports:
+      - "127.0.0.1:8002:8002"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 15
+      start_period: 180s
+
+  # ── Mistral 7B ─────────────────────────────────────────────────────────────
+  vllm-mistral:
+    <<: *vllm-common
+    container_name: majlis-vllm-mistral
+    command: >
+      python -m vllm.entrypoints.openai.api_server
+      --model mistralai/Mistral-7B-Instruct-v0.3
+      --host 0.0.0.0
+      --port 8003
+      --max-model-len 8192
+      --dtype float16
+      --gpu-memory-utilization 0.20
+      --served-model-name mistral-7b
+    ports:
+      - "127.0.0.1:8003:8003"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 15
+      start_period: 180s
+
+  # ── DeepSeek R1 Distill 8B ────────────────────────────────────────────────
+  vllm-deepseek:
+    <<: *vllm-common
+    container_name: majlis-vllm-deepseek
+    command: >
+      python -m vllm.entrypoints.openai.api_server
+      --model deepseek-ai/DeepSeek-R1-Distill-Llama-8B
+      --host 0.0.0.0
+      --port 8004
+      --max-model-len 8192
+      --dtype float16
+      --gpu-memory-utilization 0.20
+      --enable-prefix-caching
+      --served-model-name deepseek-r1-8b
+    ports:
+      - "127.0.0.1:8004:8004"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 15
+      start_period: 180s
+
+  # ── FastAPI Backend ────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: majlis-backend
+    restart: unless-stopped
+    environment:
+      # vLLM endpoints (internal Docker network)
+      - LLAMA_BASE_URL=http://vllm-llama:8001/v1
+      - QWEN_BASE_URL=http://vllm-qwen:8002/v1
+      - MISTRAL_BASE_URL=http://vllm-mistral:8003/v1
+      - DEEPSEEK_BASE_URL=http://vllm-deepseek:8004/v1
+      - CURATOR_BASE_URL=http://vllm-curator:8005/v1
+      - AMD_API_KEY=EMPTY
+      # App secrets (loaded from .env file)
+      - TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - CLERK_SECRET_KEY=${CLERK_SECRET_KEY:-}
+      - FRONTEND_ORIGIN=${FRONTEND_ORIGIN:-https://majlis.pages.dev}
+      - DATABASE_URL=sqlite:////data/majlis.db
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - db_data:/data
+    depends_on:
+      vllm-curator:
+        condition: service_healthy
+      vllm-llama:
+        condition: service_started
+      vllm-qwen:
+        condition: service_started
+      vllm-mistral:
+        condition: service_started
+      vllm-deepseek:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+  # ── Nginx reverse proxy ────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: majlis-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - ./nginx-snippets:/etc/nginx/snippets:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+volumes:
+  hf_cache:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/majlis/data/hf_cache
+
+  db_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/majlis/data/db
