@@ -184,11 +184,10 @@ export function DiscussionRoom() {
   const navigate = useNavigate()
   const { getToken } = useAuth()
 
-  const [token, setToken] = useState<string | null>(null)
   const [room, setRoom] = useState<Room | null>(null)
   const [input, setInput] = useState("")
   const [dismissTarget, setDismissTarget] = useState<{ id: string; name: string; modelId: string } | null>(null)
-  const [dismissReason, setDismissReason] = useState("")
+  const [dismissReasons, setDismissReasons] = useState<string[]>([])
   const [showPicker, setShowPicker] = useState(false)
   const [availableModels, setAvailableModels] = useState<ModelInfo[]>([])
   const [curatorBanner, setCuratorBanner] = useState<string | null>(null)
@@ -197,15 +196,12 @@ export function DiscussionRoom() {
   const [ended, setEnded] = useState(false)
   const threadRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { getToken().then(setToken) }, [])
-
-  const { messages, streaming, historyLoaded, send, requestDepth, requestDiscussion } = useDiscussion(roomId!, token)
+  const { messages, streaming, historyLoaded, send, requestDepth, requestDiscussion } = useDiscussion(roomId!, getToken)
 
   useEffect(() => {
     if (!roomId) return
     ;(async () => {
       const t = await getToken()
-      setToken(t)
       const data = await getRoom(roomId, t ?? undefined)
       setRoom(data)
     })()
@@ -229,25 +225,26 @@ export function DiscussionRoom() {
   }
 
   async function confirmDismiss() {
-    if (!dismissTarget || !roomId || !dismissReason) return
+    if (!dismissTarget || !roomId || dismissReasons.length === 0) return
+    const reason = dismissReasons.join(", ")
     const t = await getToken()
-    const result = await dismissParticipant(roomId, dismissTarget.id, dismissReason, t ?? undefined)
+    const result = await dismissParticipant(roomId, dismissTarget.id, reason, t ?? undefined)
     setRoom((prev) => prev ? {
       ...prev,
       participants: prev.participants.map((p) =>
-        p.id === dismissTarget.id ? { ...p, dismissed: true, dismissal_reason: dismissReason } : p),
+        p.id === dismissTarget.id ? { ...p, dismissed: true, dismissal_reason: reason } : p),
     } : prev)
     if (result.curator_suggestion) {
       setCuratorBanner(`${result.curator_suggestion.model_id} — ${result.curator_suggestion.reason}`)
       setTimeout(() => setCuratorBanner(null), 10000)
     }
     setDismissTarget(null)
-    setDismissReason("")
+    setDismissReasons([])
   }
 
   async function openPicker() {
     if (!roomId) return
-    const t = await getToken()
+    const t = await getToken()  
     const data = await getAvailableModels(roomId, t ?? undefined)
     setAvailableModels(data.models)
     setShowPicker(true)
@@ -299,7 +296,7 @@ export function DiscussionRoom() {
   const dismissed = room.participants.filter((p) => p.dismissed)
   const turns = groupTurns(messages)
   const lastTurn = turns[turns.length - 1]
-  void lastTurn
+  void (lastTurn)
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -553,29 +550,46 @@ export function DiscussionRoom() {
 
       {/* ── Dismiss modal ── */}
       {dismissTarget && (
-        <Overlay onClose={() => { setDismissTarget(null); setDismissReason("") }}>
+        <Overlay onClose={() => { setDismissTarget(null); setDismissReasons([]) }}>
           <div className="flex items-center gap-3 mb-4">
             <ModelAvatar modelId={dismissTarget.modelId} size="md" />
             <div>
               <p className="font-semibold">Kick {modelTheme(dismissTarget.modelId).label}?</p>
-              <p className="text-xs text-muted-foreground">The Curator will record your feedback and adapt.</p>
+              <p className="text-xs text-muted-foreground">The Curator records this and adapts future suggestions.</p>
             </div>
           </div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">Reason</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-2">
+            Why? <span className="font-normal text-muted-foreground/60">(select all that apply)</span>
+          </p>
           <div className="flex flex-wrap gap-2 mb-5">
-            {DISMISS_REASONS.map((r) => (
-              <button key={r} onClick={() => setDismissReason(r)}
-                className={cn(
-                  "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-                  dismissReason === r
-                    ? "border-foreground bg-foreground text-background"
-                    : "border-border text-muted-foreground hover:border-foreground/40"
-                )}>{r}</button>
-            ))}
+            {DISMISS_REASONS.map((r) => {
+              const selected = dismissReasons.includes(r)
+              return (
+                <button key={r}
+                  onClick={() => setDismissReasons((prev) =>
+                    selected ? prev.filter((x) => x !== r) : [...prev, r]
+                  )}
+                  className={cn(
+                    "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                    selected
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-border text-muted-foreground hover:border-foreground/40"
+                  )}>
+                  {selected ? "✓ " : ""}{r}
+                </button>
+              )
+            })}
           </div>
+          {dismissReasons.length > 0 && (
+            <p className="text-xs text-muted-foreground mb-3">
+              Feedback: <span className="font-medium text-foreground">{dismissReasons.join(", ")}</span>
+            </p>
+          )}
           <div className="flex justify-end gap-2">
-            <Button variant="ghost" size="sm" onClick={() => { setDismissTarget(null); setDismissReason("") }}>Cancel</Button>
-            <Button variant="destructive" size="sm" disabled={!dismissReason} onClick={confirmDismiss}>Kick from Room</Button>
+            <Button variant="ghost" size="sm" onClick={() => { setDismissTarget(null); setDismissReasons([]) }}>Cancel</Button>
+            <Button variant="destructive" size="sm" disabled={dismissReasons.length === 0} onClick={confirmDismiss}>
+              Kick from Room
+            </Button>
           </div>
         </Overlay>
       )}

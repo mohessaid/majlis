@@ -40,7 +40,8 @@ class DiscussRequest(BaseModel):
     room_id: str
     message: str
     target_participant_id: Optional[str] = None
-    depth_surface_message_id: Optional[str] = None  # for depth expansion, previous surface msg id
+    depth_surface_message_id: Optional[str] = None
+    mode: Optional[str] = None  # "discuss" for inter-model discussion
 
 
 async def _stream_participant(
@@ -189,7 +190,7 @@ async def discuss(
             Participant.dismissed_at.is_(None),
         )
         participants = list(session.exec(stmt).all())
-        layer = "surface"
+        layer = "discuss" if body.mode == "discuss" else "surface"
 
     if not participants:
         raise HTTPException(status_code=400, detail="No active participants in room")
@@ -238,6 +239,70 @@ async def discuss(
                         participant_id=None,
                         layer="curator",
                         content=curator_event,
+                    )
+                    session.add(curator_msg)
+                    session.commit()
+
+        # ── Curator synthesis after surface/discuss rounds ──────────────────
+        if layer in ("surface", "discuss") and participants:
+            p_map = {p.id: p for p in participants}
+            # Read what each model just wrote (most recent messages for this round)
+            from sqlmodel import select as sel
+            round_msgs = []
+            for p in participants:
+                stmt_m = sel(Message).where(
+                    Message.room_id == body.room_id,
+                    Message.participant_id == p.id,
+                    Message.layer == layer,
+                ).order_by(Message.created_at.desc()).limit(1)
+                m = session.exec(stmt_m).first()
+                if m:
+                    round_msgs.append((p.display_name, m.content))
+
+            if round_msgs:
+                context = "\n\n".join(f"{name}: {text[:400]}" for name, text in round_msgs)
+                question_short = body.message[:300]
+                # For discuss round, strip the preamble
+                if "[Discussion Round]" in question_short:
+                    question_short = "Follow-up discussion"
+                curator_messages = [
+                    {"role": "system", "content": (
+                        "You are a sharp debate moderator. In 1-2 short sentences: "
+                        "note what the models agree on or where they split. "
+                        "Then give the user a direct recommendation or next question to push further. "
+                        "Never repeat what they said — synthesize."
+                    )},
+                    {"role": "user", "content": f"Topic: {question_short}\n\nResponses:\n{context}"},
+                ]
+                curator_full = ""
+                async for chunk in call_model_streaming("curator", curator_messages, max_tokens=80, temperature=0.3):
+                    curator_full += chunk
+                    event = json.dumps({
+                        "participant_id": "curator",
+                        "model_id": "curator",
+                        "layer": "curator",
+                        "chunk": chunk,
+                        "done": False,
+                        "is_curator": True,
+                    })
+                    yield f"data: {event}\n\n".encode()
+
+                if curator_full:
+                    yield (
+                        "data: " + json.dumps({
+                            "participant_id": "curator",
+                            "model_id": "curator",
+                            "layer": "curator",
+                            "done": True,
+                            "is_curator": True,
+                        }) + "\n\n"
+                    ).encode()
+                    curator_msg = Message(
+                        id=str(uuid.uuid4()),
+                        room_id=body.room_id,
+                        participant_id=None,
+                        layer="curator",
+                        content=curator_full,
                     )
                     session.add(curator_msg)
                     session.commit()

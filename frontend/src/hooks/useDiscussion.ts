@@ -27,22 +27,27 @@ function historyToMessage(h: HistoryMessage): MessageBubble {
   };
 }
 
-export function useDiscussion(roomId: string, token: string | null | undefined) {
+export function useDiscussion(
+  roomId: string,
+  getToken: () => Promise<string | null>
+) {
   const [messages, setMessages] = useState<MessageBubble[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const cancelRef = useRef<(() => void) | null>(null);
 
-  // Load history once token is available
+  // Load history once on mount
   useEffect(() => {
-    if (!token || !roomId || historyLoaded) return;
-    getMessages(roomId, token)
-      .then((hist) => {
-        setMessages(hist.map(historyToMessage));
-        setHistoryLoaded(true);
-      })
-      .catch(() => setHistoryLoaded(true)); // silently fail, start fresh
-  }, [token, roomId, historyLoaded]);
+    if (!roomId || historyLoaded) return;
+    getToken().then((token) =>
+      getMessages(roomId, token ?? undefined)
+        .then((hist) => {
+          setMessages(hist.map(historyToMessage));
+          setHistoryLoaded(true);
+        })
+        .catch(() => setHistoryLoaded(true))
+    );
+  }, [roomId]);
 
   const appendChunk = useCallback((
     participantId: string,
@@ -88,8 +93,16 @@ export function useDiscussion(roomId: string, token: string | null | undefined) 
   }, []);
 
   const send = useCallback(
-    (message: string, displayNames: Record<string, string>, targetParticipantId?: string) => {
+    async (
+      message: string,
+      displayNames: Record<string, string>,
+      targetParticipantId?: string,
+      mode?: string
+    ) => {
       if (streaming) return;
+
+      // Always get a fresh token to avoid 401 from stale tokens
+      const token = await getToken();
 
       setMessages((prev) => [
         ...prev,
@@ -109,7 +122,7 @@ export function useDiscussion(roomId: string, token: string | null | undefined) 
       setStreaming(true);
 
       const cancel = streamDiscussion(
-        { room_id: roomId, message, target_participant_id: targetParticipantId },
+        { room_id: roomId, message, target_participant_id: targetParticipantId, mode },
         token,
         (chunk: DiscussionChunk) => {
           if (chunk.done) {
@@ -124,7 +137,7 @@ export function useDiscussion(roomId: string, token: string | null | undefined) 
 
       cancelRef.current = cancel;
     },
-    [roomId, token, streaming, appendChunk, finalizeMessage]
+    [roomId, streaming, getToken, appendChunk, finalizeMessage]
   );
 
   const requestDepth = useCallback(
@@ -134,16 +147,16 @@ export function useDiscussion(roomId: string, token: string | null | undefined) 
     [send]
   );
 
-  // Request models to discuss among themselves, given the last turn's responses as context
   const requestDiscussion = useCallback(
     (lastResponses: MessageBubble[], displayNames: Record<string, string>) => {
       if (streaming || lastResponses.length === 0) return;
-      const context = lastResponses
-        .filter((m) => m.layer !== "user" && m.layer !== "curator")
-        .map((m) => `${m.display_name}: "${m.content.slice(0, 300)}${m.content.length > 300 ? "…" : ""}"`)
+      const modelMsgs = lastResponses.filter((m) => m.layer !== "user" && m.layer !== "curator");
+      if (modelMsgs.length === 0) return;
+      const context = modelMsgs
+        .map((m) => `${m.display_name}: "${m.content.slice(0, 250)}${m.content.length > 250 ? "…" : ""}"`)
         .join("\n\n");
-      const message = `[Discussion Round]\n\nPrevious responses:\n${context}\n\nNow respond to what the others said. Agree with specifics, challenge a point, or add something they missed. 2-3 sentences only.`;
-      send(message, displayNames);
+      const message = `[Discussion Round]\n\n${context}`;
+      send(message, displayNames, undefined, "discuss");
     },
     [send, streaming]
   );

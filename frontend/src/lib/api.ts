@@ -149,7 +149,7 @@ export async function getMessages(roomId: string, token?: string): Promise<Histo
 }
 
 export function streamDiscussion(
-  params: { room_id: string; message: string; target_participant_id?: string },
+  params: { room_id: string; message: string; target_participant_id?: string; mode?: string },
   token: string | null | undefined,
   onChunk: (event: DiscussionChunk) => void,
   onDone: () => void,
