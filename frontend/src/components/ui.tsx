@@ -1,6 +1,4 @@
 import * as React from "react";
-import { Slot } from "@radix-ui/react-slot";
-import { cva, type VariantProps } from "class-variance-authority";
 import { twMerge } from "tailwind-merge";
 import { clsx, type ClassValue } from "clsx";
 
@@ -9,62 +7,45 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 // ── Button ──────────────────────────────────────────────────────────────────
-const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4c6ef5] focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-40 cursor-pointer",
-  {
-    variants: {
-      variant: {
-        default: "bg-[#4c6ef5] text-white hover:bg-[#4263eb]",
-        secondary: "bg-white text-[#343a40] border border-[#dee2e6] hover:bg-[#f8f9fa] hover:border-[#ced4da]",
-        ghost: "text-[#868e96] hover:text-[#495057] hover:bg-[#f1f3f5]",
-        danger: "text-[#e03131] hover:text-white hover:bg-[#e03131]",
-        outline: "border border-[#dee2e6] text-[#343a40] hover:bg-[#f8f9fa]",
-      },
-      size: {
-        default: "h-9 px-4 py-2",
-        sm: "h-7 px-3 text-xs",
-        lg: "h-11 px-6 text-base",
-        icon: "h-8 w-8",
-      },
-    },
-    defaultVariants: { variant: "default", size: "default" },
-  }
-);
+type BtnVariant = "primary" | "secondary" | "ghost" | "danger";
+type BtnSize = "sm" | "md" | "lg";
 
-export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
-  asChild?: boolean;
+const btnBase = "inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-900 focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-40 cursor-pointer select-none";
+const btnVariants: Record<BtnVariant, string> = {
+  primary:   "bg-gray-900 text-white hover:bg-gray-700",
+  secondary: "bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 hover:border-gray-300",
+  ghost:     "text-gray-500 hover:text-gray-900 hover:bg-gray-100",
+  danger:    "text-red-600 hover:text-white hover:bg-red-600 border border-red-200 hover:border-red-600",
+};
+const btnSizes: Record<BtnSize, string> = {
+  sm:  "h-7 px-3 text-xs",
+  md:  "h-8 px-3.5 text-sm",
+  lg:  "h-10 px-5 text-sm",
+};
+
+interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: BtnVariant;
+  size?: BtnSize;
 }
-
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
-    const Comp = asChild ? Slot : "button";
-    return <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />;
-  }
+  ({ className, variant = "primary", size = "md", ...props }, ref) => (
+    <button ref={ref} className={cn(btnBase, btnVariants[variant], btnSizes[size], className)} {...props} />
+  )
 );
 Button.displayName = "Button";
 
 // ── Card ────────────────────────────────────────────────────────────────────
 export function Card({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div className={cn("rounded-xl border border-[#e9ecef] bg-white", className)} {...props}>
-      {children}
-    </div>
-  );
+  return <div className={cn("rounded-xl border border-gray-100 bg-white", className)} {...props}>{children}</div>;
 }
 
 // ── Textarea ────────────────────────────────────────────────────────────────
 export const Textarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttributes<HTMLTextAreaElement>>(
   ({ className, ...props }, ref) => (
-    <textarea
-      ref={ref}
-      className={cn(
-        "w-full resize-none rounded-xl border border-[#dee2e6] bg-white px-4 py-3 text-sm text-[#212529] placeholder:text-[#ced4da] focus:border-[#4c6ef5] focus:outline-none focus:ring-2 focus:ring-[#4c6ef5]/20 transition-all",
-        className
-      )}
-      {...props}
-    />
+    <textarea ref={ref} className={cn(
+      "w-full resize-none rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 focus:border-gray-400 focus:outline-none transition-colors",
+      className
+    )} {...props} />
   )
 );
 Textarea.displayName = "Textarea";
@@ -73,67 +54,71 @@ Textarea.displayName = "Textarea";
 export function Spinner({ className }: { className?: string }) {
   return (
     <svg className={cn("animate-spin", className)} viewBox="0 0 24 24" fill="none">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+      <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
+      <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
     </svg>
   );
 }
 
-// ── Toggle ───────────────────────────────────────────────────────────────────
-export function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+// ── Cap toggle ───────────────────────────────────────────────────────────────
+export function CapToggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
     <button
+      type="button"
       onClick={() => onChange(!checked)}
       className={cn(
-        "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors border",
-        checked
-          ? "border-[#bac8ff] bg-[#edf2ff] text-[#4263eb]"
-          : "border-[#dee2e6] bg-white text-[#adb5bd] hover:text-[#868e96] hover:border-[#ced4da]"
+        "rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors",
+        checked ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-white text-gray-400 hover:text-gray-600"
       )}
-      type="button"
-    >
-      <span className={cn("h-1.5 w-1.5 rounded-full", checked ? "bg-[#4263eb]" : "bg-[#ced4da]")} />
-      {label}
-    </button>
+    >{label}</button>
   );
 }
 
-// ── ScoreBar ─────────────────────────────────────────────────────────────────
+// ── Score bar ─────────────────────────────────────────────────────────────────
 export function ScoreBar({ score }: { score: number }) {
   const pct = Math.round(score * 100);
-  const color = score >= 0.7 ? "#2f9e44" : score >= 0.5 ? "#e67700" : "#e03131";
-  const trackColor = score >= 0.7 ? "#d3f9d8" : score >= 0.5 ? "#fff3bf" : "#ffe3e3";
+  const [trackColor, barColor] = score >= 0.7 ? ["#dcfce7", "#16a34a"] : score >= 0.5 ? ["#fef9c3", "#ca8a04"] : ["#fee2e2", "#dc2626"];
   return (
-    <div className="flex items-center gap-2">
-      <div className="h-1.5 flex-1 rounded-full overflow-hidden" style={{ background: trackColor }}>
-        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
+    <div className="flex items-center gap-1.5">
+      <div className="h-1 flex-1 rounded-full overflow-hidden" style={{ background: trackColor }}>
+        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: barColor }} />
       </div>
-      <span className="text-xs font-medium tabular-nums" style={{ color }}>{pct}%</span>
+      <span className="w-7 text-right text-[11px] font-medium tabular-nums" style={{ color: barColor }}>{pct}%</span>
     </div>
   );
 }
 
-// ── ModelDot + colors ─────────────────────────────────────────────────────────
-const MODEL_COLORS: Record<string, string> = {
-  "llama-3.1-8b": "#0ca678",
-  "qwen2.5-7b": "#228be6",
-  "mistral-7b": "#e64980",
-  "deepseek-r1-8b": "#fd7e14",
-  curator: "#7950f2",
+// ── Model config ─────────────────────────────────────────────────────────────
+interface ModelTheme { label: string; initial: string; text: string; bg: string; border: string; }
+
+const MODEL_THEME: Record<string, ModelTheme> = {
+  "llama-3.1-8b":    { label: "Llama 3.1",  initial: "L", text: "#047857", bg: "#ecfdf5", border: "#a7f3d0" },
+  "qwen2.5-7b":      { label: "Qwen 2.5",   initial: "Q", text: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe" },
+  "mistral-7b":      { label: "Mistral",    initial: "M", text: "#be185d", bg: "#fdf2f8", border: "#fbcfe8" },
+  "deepseek-r1-8b":  { label: "DeepSeek",   initial: "D", text: "#b45309", bg: "#fffbeb", border: "#fde68a" },
+  curator:           { label: "Curator",    initial: "C", text: "#374151", bg: "#f9fafb", border: "#e5e7eb" },
 };
-export function modelColor(modelId: string) {
-  return MODEL_COLORS[modelId] ?? "#adb5bd";
+const FALLBACK: ModelTheme = { label: "Model", initial: "?", text: "#6b7280", bg: "#f9fafb", border: "#e5e7eb" };
+
+export function modelTheme(id: string): ModelTheme { return MODEL_THEME[id] ?? FALLBACK; }
+
+export function ModelAvatar({ modelId, size = "sm" }: { modelId: string; size?: "xs" | "sm" | "md" }) {
+  const t = modelTheme(modelId);
+  const dim = { xs: "h-5 w-5 text-[10px]", sm: "h-7 w-7 text-xs", md: "h-9 w-9 text-sm" }[size];
+  return (
+    <div className={cn("rounded-lg flex-shrink-0 flex items-center justify-center font-bold border", dim)}
+      style={{ background: t.bg, color: t.text, borderColor: t.border }}>
+      {t.initial}
+    </div>
+  );
 }
-export function modelBg(modelId: string) {
-  const bgMap: Record<string, string> = {
-    "llama-3.1-8b": "#e6fcf5",
-    "qwen2.5-7b": "#e7f5ff",
-    "mistral-7b": "#fff0f6",
-    "deepseek-r1-8b": "#fff4e6",
-    curator: "#f3f0ff",
-  };
-  return bgMap[modelId] ?? "#f8f9fa";
-}
-export function ModelDot({ modelId, size = 8 }: { modelId: string; size?: number }) {
-  return <span className="rounded-full inline-block flex-shrink-0" style={{ width: size, height: size, background: modelColor(modelId) }} />;
+
+export function ModelTag({ modelId }: { modelId: string }) {
+  const t = modelTheme(modelId);
+  return (
+    <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold"
+      style={{ background: t.bg, color: t.text, borderColor: t.border }}>
+      {t.label}
+    </span>
+  );
 }

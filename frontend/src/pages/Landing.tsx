@@ -2,295 +2,204 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
 import { createRoom, addParticipant, type CreateRoomResponse, type Recommendation } from "../lib/api";
-import { Button, Card, Textarea, Spinner, Toggle, ScoreBar, ModelDot, modelColor, modelBg, cn } from "../components/ui";
+import { Button, Card, Textarea, Spinner, CapToggle, ScoreBar, ModelAvatar, ModelTag, modelTheme, cn } from "../components/ui";
 
-interface SelectedModel {
-  model_id: string;
-  display_name: string;
-  capabilities: { web_search: boolean; thinking: boolean; fast_mode: boolean };
-  reputation_score: number;
-  reason: string;
-}
+interface SelectedCaps { web_search: boolean; thinking: boolean; fast_mode: boolean; }
+interface Selection { model_id: string; display_name: string; caps: SelectedCaps; score: number; reason: string; }
 
-const MODEL_SHORT: Record<string, string> = {
-  "llama-3.1-8b": "Llama 3.1",
-  "qwen2.5-7b": "Qwen 2.5",
-  "mistral-7b": "Mistral 7B",
-  "deepseek-r1-8b": "DeepSeek R1",
-};
-
-function recToSelected(r: Recommendation): SelectedModel {
-  return {
-    model_id: r.model_id,
-    display_name: r.display_name,
-    capabilities: r.suggested_capabilities,
-    reputation_score: r.reputation_score,
-    reason: r.reason,
-  };
+function fromRec(r: Recommendation): Selection {
+  return { model_id: r.model_id, display_name: r.display_name, caps: r.suggested_capabilities, score: r.reputation_score, reason: r.reason };
 }
 
 export function Landing() {
-  const [question, setQuestion] = useState("");
-  const [step, setStep] = useState<"input" | "setup" | "entering">("input");
+  const [q, setQ] = useState("");
+  const [step, setStep] = useState<"idle" | "loading" | "selecting" | "starting">("idle");
   const [room, setRoom] = useState<CreateRoomResponse | null>(null);
-  const [selected, setSelected] = useState<SelectedModel[]>([]);
+  const [selections, setSelections] = useState<Selection[]>([]);
   const [error, setError] = useState("");
   const navigate = useNavigate();
   const { getToken } = useAuth();
 
-  async function handleAnalyze(e: FormEvent) {
+  async function analyze(e: FormEvent) {
     e.preventDefault();
-    if (!question.trim()) return;
-    setStep("setup");
+    if (!q.trim()) return;
+    setStep("loading");
     setError("");
     try {
       const token = await getToken();
-      const data = await createRoom(question.trim(), token ?? undefined);
+      const data = await createRoom(q.trim(), token ?? undefined);
       setRoom(data);
-      setSelected(data.curator_recommendations.map(recToSelected));
+      setSelections(data.curator_recommendations.map(fromRec));
+      setStep("selecting");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to analyze question");
-      setStep("input");
+      setError(err instanceof Error ? err.message : "Failed — please try again");
+      setStep("idle");
     }
   }
 
-  async function handleStart() {
-    if (!room || selected.length === 0) return;
-    setStep("entering");
+  async function start() {
+    if (!room || selections.length === 0) return;
+    setStep("starting");
     try {
       const token = await getToken();
-      await Promise.all(
-        selected.map((m) => addParticipant(room.room_id, m.model_id, m.capabilities, token ?? undefined))
-      );
+      await Promise.all(selections.map((s) => addParticipant(room.room_id, s.model_id, s.caps, token ?? undefined)));
       navigate(`/room/${room.room_id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to start discussion");
-      setStep("setup");
+      setError(err instanceof Error ? err.message : "Failed to start");
+      setStep("selecting");
     }
   }
 
-  function toggleModel(r: Recommendation) {
-    setSelected((prev) => {
-      const exists = prev.find((m) => m.model_id === r.model_id);
-      if (exists) return prev.filter((m) => m.model_id !== r.model_id);
-      return [...prev, recToSelected(r)];
+  function toggle(r: Recommendation) {
+    setSelections((prev) => {
+      const has = prev.find((s) => s.model_id === r.model_id);
+      return has ? prev.filter((s) => s.model_id !== r.model_id) : [...prev, fromRec(r)];
     });
   }
 
-  function updateCap(modelId: string, cap: keyof SelectedModel["capabilities"], val: boolean) {
-    setSelected((prev) =>
-      prev.map((m) => m.model_id === modelId ? { ...m, capabilities: { ...m.capabilities, [cap]: val } } : m)
-    );
+  function setCap(id: string, cap: keyof SelectedCaps, val: boolean) {
+    setSelections((prev) => prev.map((s) => s.model_id === id ? { ...s, caps: { ...s.caps, [cap]: val } } : s));
   }
 
-  const allModels = room?.all_models ?? [];
-  const unselectedModels = allModels.filter(
-    (m) => !selected.find((s) => s.model_id === m.model_id) &&
-      !room?.curator_recommendations.find((r) => r.model_id === m.model_id)
-  );
-
-  if (step === "input") {
+  if (step === "idle" || (step === "loading" && !room)) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-[#f8f9fa]">
-        <div className="w-full max-w-xl space-y-8">
-          {/* Brand */}
-          <div className="space-y-3 text-center">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#dee2e6] bg-white px-4 py-1.5 text-xs font-medium text-[#868e96]">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#4c6ef5]" />
-              Majlis · Multi-AI Discussion Arena
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4">
+        <div className="w-full max-w-lg space-y-6">
+
+          {/* Header */}
+          <div className="text-center space-y-2">
+            <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-500">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-500" /> 5 models online
             </div>
-            <h1 className="text-4xl font-bold text-[#212529] tracking-tight">
-              Multiple AI minds.<br />One table.
-            </h1>
-            <p className="text-[#868e96] max-w-sm mx-auto text-sm leading-relaxed">
-              Ask a question. The Curator selects the best models for your topic. They respond, debate, and earn their seat.
-            </p>
+            <h1 className="text-4xl font-semibold tracking-tight text-gray-900">Majlis</h1>
+            <p className="text-gray-500 text-sm">Multiple AI minds. One discussion. One answer you can trust.</p>
           </div>
 
-          {/* Input card */}
-          <Card className="p-6 shadow-sm">
-            <form onSubmit={handleAnalyze} className="space-y-4">
+          {/* Form */}
+          <Card className="p-5 shadow-sm">
+            <form onSubmit={analyze} className="space-y-3">
               <Textarea
-                placeholder="What do you want to discuss? e.g. &ldquo;Best approach to build a production-grade RAG system&rdquo;"
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                rows={4}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAnalyze(e as unknown as FormEvent); }
-                }}
+                rows={3}
+                placeholder="What do you want to discuss?"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                disabled={step === "loading"}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); analyze(e as unknown as FormEvent); } }}
               />
-              <Button type="submit" size="lg" className="w-full" disabled={!question.trim()}>
-                Analyze & Select Models →
+              <Button type="submit" size="lg" className="w-full" disabled={!q.trim() || step === "loading"}>
+                {step === "loading" ? <><Spinner className="h-4 w-4" /> Analyzing…</> : "Analyze & Select Models"}
               </Button>
-              {error && <p className="text-xs text-[#e03131] text-center">{error}</p>}
             </form>
+            {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
           </Card>
 
-          {/* Feature hints */}
-          <div className="flex items-center justify-center gap-6 text-xs text-[#adb5bd]">
-            <span>5 specialized models</span>
-            <span className="h-3 w-px bg-[#dee2e6]" />
-            <span>Curator-weighted selection</span>
-            <span className="h-3 w-px bg-[#dee2e6]" />
-            <span>Real-time streaming</span>
+          {/* Model preview */}
+          <div className="flex items-center justify-center gap-2">
+            {["llama-3.1-8b", "qwen2.5-7b", "mistral-7b", "deepseek-r1-8b"].map((id) => (
+              <ModelTag key={id} modelId={id} />
+            ))}
           </div>
         </div>
       </div>
     );
   }
 
+  // Selection step
+  const allRecs = room?.curator_recommendations ?? [];
+  const extraModels = (room?.all_models ?? []).filter(
+    (m) => !allRecs.find((r) => r.model_id === m.model_id)
+  );
+
   return (
-    <div className="min-h-screen bg-[#f8f9fa] flex flex-col items-center px-4 py-10">
-      <div className="w-full max-w-xl space-y-5">
+    <div className="min-h-screen bg-gray-50 flex flex-col items-center px-4 py-10">
+      <div className="w-full max-w-lg space-y-4">
 
         {/* Back + question */}
         <div>
-          <button
-            onClick={() => { setStep("input"); setRoom(null); setSelected([]); }}
-            className="text-xs text-[#adb5bd] hover:text-[#868e96] mb-3 flex items-center gap-1 transition-colors"
-          >
+          <button onClick={() => { setStep("idle"); setRoom(null); setSelections([]); }}
+            className="mb-3 flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
             ← Back
           </button>
           <Card className="p-4">
-            <p className="text-[10px] uppercase tracking-widest text-[#adb5bd] mb-1 font-medium">Your Question</p>
-            <p className="text-sm font-medium text-[#343a40]">"{question}"</p>
+            <p className="mb-1 text-[11px] font-medium uppercase tracking-widest text-gray-400">Question</p>
+            <p className="text-sm font-medium text-gray-800">"{q}"</p>
           </Card>
         </div>
 
-        {!room ? (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-sm text-[#868e96] px-1">
-              <Spinner className="h-4 w-4 text-[#4c6ef5]" />
-              <span>Curator is analyzing your question…</span>
+        {/* Curator analysis */}
+        {room?.curator_notes && (
+          <div className="flex gap-3 rounded-xl border border-gray-200 bg-white p-4">
+            <ModelAvatar modelId="curator" size="sm" />
+            <div>
+              <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Curator</p>
+              <p className="text-sm text-gray-700">{room.curator_notes}</p>
             </div>
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-20 rounded-xl bg-white border border-[#e9ecef] animate-pulse" />
+          </div>
+        )}
+
+        {/* Model list */}
+        <div>
+          <div className="mb-2 flex items-center justify-between px-0.5">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Recommended</p>
+            <span className="text-xs text-gray-400">{selections.length} selected</span>
+          </div>
+
+          <div className="space-y-2">
+            {allRecs.map((rec) => {
+              const active = !!selections.find((s) => s.model_id === rec.model_id);
+              const sel = selections.find((s) => s.model_id === rec.model_id);
+              const t = modelTheme(rec.model_id);
+              return (
+                <Card key={rec.model_id}
+                  className={cn("p-4 cursor-pointer select-none transition-all", active ? "shadow-sm" : "opacity-60 hover:opacity-80")}
+                  onClick={() => toggle(rec)}>
+                  <div className="flex items-start gap-3">
+                    <ModelAvatar modelId={rec.model_id} size="md" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-sm font-semibold" style={{ color: t.text }}>{t.label}</span>
+                        <div className="w-24 flex-shrink-0"><ScoreBar score={rec.reputation_score} /></div>
+                      </div>
+                      <p className="text-xs text-gray-500 mb-2 leading-relaxed">{rec.reason}</p>
+                      {active && sel && (
+                        <div className="flex gap-1.5 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                          <CapToggle checked={sel.caps.web_search} onChange={(v) => setCap(rec.model_id, "web_search", v)} label="Web search" />
+                          <CapToggle checked={sel.caps.thinking} onChange={(v) => setCap(rec.model_id, "thinking", v)} label="Thinking" />
+                          <CapToggle checked={sel.caps.fast_mode} onChange={(v) => setCap(rec.model_id, "fast_mode", v)} label="Fast" />
+                        </div>
+                      )}
+                    </div>
+                    {/* Checkbox */}
+                    <div className={cn("mt-0.5 h-4 w-4 flex-shrink-0 rounded-full border-2 flex items-center justify-center transition-all",
+                      active ? "border-gray-900" : "border-gray-300")}>
+                      {active && <div className="h-2 w-2 rounded-full bg-gray-900" />}
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+
+            {extraModels.map((m) => (
+              <Card key={m.model_id}
+                className="p-3 cursor-pointer opacity-40 hover:opacity-60 transition-opacity"
+                onClick={() => toggle({ model_id: m.model_id, display_name: m.display_name, reputation_score: m.score, reason: "Added manually", suggested_capabilities: { web_search: false, thinking: false, fast_mode: false } })}>
+                <div className="flex items-center gap-3">
+                  <ModelAvatar modelId={m.model_id} size="sm" />
+                  <span className="text-sm text-gray-600">{modelTheme(m.model_id).label}</span>
+                  <span className="ml-auto text-xs text-gray-400">+ Add</span>
+                </div>
+              </Card>
             ))}
           </div>
-        ) : (
-          <>
-            {/* Curator note */}
-            {room.curator_notes && (
-              <div className="flex gap-3 rounded-xl border border-[#e5dbff] bg-[#f3f0ff] p-4">
-                <ModelDot modelId="curator" size={8} />
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-widest text-[#7950f2] mb-1">Curator Analysis</p>
-                  <p className="text-sm text-[#5f3dc4]">{room.curator_notes}</p>
-                </div>
-              </div>
-            )}
+        </div>
 
-            {/* Models */}
-            <div>
-              <div className="flex items-center justify-between mb-2 px-1">
-                <p className="text-xs font-semibold uppercase tracking-widest text-[#adb5bd]">
-                  Recommended Models
-                </p>
-                <span className="text-xs text-[#adb5bd]">{selected.length} selected</span>
-              </div>
+        {error && <p className="text-xs text-red-500">{error}</p>}
 
-              <div className="space-y-2">
-                {room.curator_recommendations.map((rec) => {
-                  const isSelected = !!selected.find((s) => s.model_id === rec.model_id);
-                  const sel = selected.find((s) => s.model_id === rec.model_id);
-                  const color = modelColor(rec.model_id);
-                  const bg = modelBg(rec.model_id);
-                  return (
-                    <Card
-                      key={rec.model_id}
-                      className={cn(
-                        "p-4 cursor-pointer transition-all select-none",
-                        isSelected
-                          ? "border-[#dee2e6] shadow-sm"
-                          : "border-[#e9ecef] opacity-60 hover:opacity-80"
-                      )}
-                      onClick={() => toggleModel(rec)}
-                    >
-                      <div className="flex items-start gap-3">
-                        {/* Avatar */}
-                        <div
-                          className="flex-shrink-0 h-8 w-8 rounded-lg flex items-center justify-center text-xs font-bold"
-                          style={{ background: bg, color }}
-                        >
-                          {(MODEL_SHORT[rec.model_id] ?? rec.display_name).charAt(0)}
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between gap-2 mb-0.5">
-                            <span className="text-sm font-semibold text-[#343a40]">
-                              {MODEL_SHORT[rec.model_id] ?? rec.display_name}
-                            </span>
-                            <div className="w-24 flex-shrink-0">
-                              <ScoreBar score={rec.reputation_score} />
-                            </div>
-                          </div>
-                          <p className="text-xs text-[#868e96] mb-2">{rec.reason}</p>
-
-                          {isSelected && sel && (
-                            <div className="flex gap-1.5 flex-wrap" onClick={(e) => e.stopPropagation()}>
-                              <Toggle checked={sel.capabilities.web_search} onChange={(v) => updateCap(rec.model_id, "web_search", v)} label="Web Search" />
-                              <Toggle checked={sel.capabilities.thinking} onChange={(v) => updateCap(rec.model_id, "thinking", v)} label="Thinking" />
-                              <Toggle checked={sel.capabilities.fast_mode} onChange={(v) => updateCap(rec.model_id, "fast_mode", v)} label="Fast" />
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Checkbox */}
-                        <div
-                          className={cn(
-                            "flex-shrink-0 h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all",
-                            isSelected ? "border-[#4c6ef5]" : "border-[#dee2e6]"
-                          )}
-                        >
-                          {isSelected && <div className="h-2.5 w-2.5 rounded-full bg-[#4c6ef5]" />}
-                        </div>
-                      </div>
-                    </Card>
-                  );
-                })}
-
-                {/* Additional models */}
-                {unselectedModels.map((m) => {
-                  const rec: Recommendation = {
-                    model_id: m.model_id,
-                    display_name: m.display_name,
-                    reputation_score: m.score,
-                    reason: "Add manually",
-                    suggested_capabilities: { web_search: false, thinking: false, fast_mode: false },
-                  };
-                  return (
-                    <Card
-                      key={m.model_id}
-                      className="p-3 cursor-pointer border-[#e9ecef] opacity-50 hover:opacity-70 transition-opacity"
-                      onClick={() => toggleModel(rec)}
-                    >
-                      <div className="flex items-center gap-3">
-                        <ModelDot modelId={m.model_id} size={8} />
-                        <span className="text-sm text-[#868e96]">{m.display_name}</span>
-                        <span className="ml-auto text-xs text-[#adb5bd]">+ Add</span>
-                      </div>
-                    </Card>
-                  );
-                })}
-              </div>
-            </div>
-
-            {error && <p className="text-xs text-[#e03131] px-1">{error}</p>}
-
-            <Button
-              size="lg"
-              className="w-full"
-              disabled={selected.length === 0 || step === "entering"}
-              onClick={handleStart}
-            >
-              {step === "entering" ? (
-                <><Spinner className="h-4 w-4" /> Entering the room…</>
-              ) : (
-                `Start Discussion with ${selected.length} model${selected.length !== 1 ? "s" : ""} →`
-              )}
-            </Button>
-          </>
-        )}
+        <Button size="lg" className="w-full" disabled={selections.length === 0 || step === "starting"} onClick={start}>
+          {step === "starting"
+            ? <><Spinner className="h-4 w-4" /> Starting…</>
+            : `Start Discussion with ${selections.length} model${selections.length !== 1 ? "s" : ""} →`}
+        </Button>
       </div>
     </div>
   );
