@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Majlis — Deck</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; background: #fafafa; color: #111; }
+    .slide {
+      min-height: 100vh;
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 72px 48px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      page-break-after: always;
+      border-bottom: 1px solid #e5e5e5;
+    }
+    .slide:last-child { border-bottom: none; }
+    h1 { font-size: 2.4rem; font-weight: 700; letter-spacing: -0.03em; margin-bottom: 0.75rem; }
+    h2 { font-size: 1.15rem; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: 0.12em; margin-bottom: 1.5rem; }
+    p, li { font-size: 1.05rem; line-height: 1.55; color: #333; }
+    ul { margin-top: 0.75rem; padding-left: 1.25rem; }
+    li { margin-bottom: 0.5rem; }
+    .tagline { font-size: 1.35rem; color: #444; margin-top: 0.5rem; }
+    .meta { margin-top: 2rem; font-size: 0.9rem; color: #888; }
+    @media print {
+      body { background: #fff; }
+      .slide { min-height: auto; padding: 48px; page-break-after: always; }
+    }
+  </style>
+</head>
+<body>
+
+  <section class="slide">
+    <h2>Idea</h2>
+    <h1>Majlis</h1>
+    <p class="tagline">Multiple AI models. One moderated room. You steer; the Curator keeps it sharp.</p>
+    <p class="meta">Hackathon · AMD GPU · 2026</p>
+  </section>
+
+  <section class="slide">
+    <h2>Problem</h2>
+    <ul>
+      <li>Single models feel like a black box — no tension, no second opinions.</li>
+      <li>Users need concise, comparable answers — not endless essays.</li>
+      <li>Trust should adapt: bad panelists get kicked; good ones earn reputation.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <h2>Product</h2>
+    <ul>
+      <li><strong>Curator</strong> analyzes the question and recommends a panel.</li>
+      <li><strong>Round-based chat</strong> — your prompt, then parallel model cards (stack / flip).</li>
+      <li><strong>Curator moves</strong> — ready prompts (challenge, consensus, devil’s advocate…).</li>
+      <li><strong>Kick + feedback</strong> — multi-select reasons; removed models stay out of discussion context.</li>
+      <li><strong>Tools</strong> — Tavily web search (per model if enabled; optional shared “web this round”).</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <h2>Stack</h2>
+    <ul>
+      <li><strong>Frontend:</strong> React, Vite, TypeScript, Tailwind, shadcn/ui, Clerk, Cloudflare Pages.</li>
+      <li><strong>Backend:</strong> FastAPI, SQLModel/SQLite, JWT (Clerk).</li>
+      <li><strong>Inference:</strong> vLLM on AMD (ROCm) — multiple 8B-class models + small curator.</li>
+      <li><strong>Edge:</strong> Nginx on droplet; Cloudflare proxy + DNS.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <h2>Architecture</h2>
+    <ul>
+      <li>Browser → Pages → API (HTTPS) → Nginx → FastAPI.</li>
+      <li>FastAPI streams SSE from <code>/discuss</code>; messages persisted per room.</li>
+      <li>Each model has its own OpenAI-compatible vLLM port; curator calls are sync/stream as needed.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <h2>Demo path</h2>
+    <ul>
+      <li>Sign in → ask a question → Curator picks models → start room.</li>
+      <li>Read stacked cards → Curator move → models respond to each other (active panel only).</li>
+      <li>Kick a weak answer → Curator notes suggestion; reputation updates backend-side.</li>
+    </ul>
+  </section>
+
+  <section class="slide">
+    <h2>Thanks</h2>
+    <h1>Open the Majlis.</h1>
+    <p class="tagline">mohessaid.com · api + pages deployment ready.</p>
+  </section>
+
+</body>
+</html>

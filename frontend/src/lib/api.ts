@@ -125,6 +125,19 @@ export interface RoomSummary {
   participant_count: number;
 }
 
+export async function getDiscussPrompts(token?: string): Promise<DiscussPrompt[]> {
+  const res = await fetch(`${BASE}/curator/discuss-prompts`, { headers: headers(token) });
+  if (!res.ok) throw new Error(await res.text());
+  const data = await res.json();
+  return data.prompts as DiscussPrompt[];
+}
+
+export interface DiscussPrompt {
+  id: string;
+  label: string;
+  instruction: string;
+}
+
 export async function listRooms(token?: string): Promise<RoomSummary[]> {
   const res = await fetch(`${BASE}/rooms`, { headers: headers(token) });
   if (!res.ok) throw new Error(await res.text());
@@ -149,7 +162,13 @@ export async function getMessages(roomId: string, token?: string): Promise<Histo
 }
 
 export function streamDiscussion(
-  params: { room_id: string; message: string; target_participant_id?: string; mode?: string },
+  params: {
+    room_id: string;
+    message: string;
+    target_participant_id?: string;
+    mode?: string;
+    force_web_search?: boolean;
+  },
   token: string | null | undefined,
   onChunk: (event: DiscussionChunk) => void,
   onDone: () => void,
@@ -207,7 +226,7 @@ export function streamDiscussion(
 export interface DiscussionChunk {
   participant_id: string;
   model_id: string;
-  layer: "surface" | "depth" | "thinking" | "curator";
+  layer: "surface" | "depth" | "thinking" | "curator" | "discuss";
   chunk?: string;
   done?: boolean;
   searched?: boolean;

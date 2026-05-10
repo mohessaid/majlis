@@ -1,143 +1,86 @@
 # Majlis
 
-A multi-LLM discussion arena. Multiple AI models sit at the same table, respond to your questions, and earn or lose reputation based on their performance. The Curator watches the room and keeps things sharp.
+Multi-LLM **discussion arena**: several models answer in parallel, you moderate with **kicks**, **Curator moves** (ready debate prompts), and optional **web search** (Tavily). History is persisted per room.
+
+## What you get
+
+| Feature | Notes |
+|--------|--------|
+| Curator | Recommends panelists; **synthesizes** after each surface/discuss round; shallow “same answer twice” check on depth |
+| **Curator moves** | `GET /curator/discuss-prompts` — e.g. *Challenge*, *Find consensus*, *Devil’s advocate* — UI sends `mode: "discuss"` with a structured directive |
+| Discuss round | Models only see **active** panelists in the pasted context — **kicked** models are excluded from follow-up discussion |
+| Tools | Per-participant **web_search** at join; **force_web_search** on `/discuss` runs **one shared** Tavily pass for that round |
+| UI | Light shadcn/Tailwind; stacked **response cards**; Clerk auth |
 
 ## Architecture
 
 | Layer | Tech |
-|---|---|
-| Frontend | React + Vite + TypeScript → Cloudflare Pages |
-| Backend | FastAPI (Python) → AMD MI300X Droplet |
-| Models | vLLM (ROCm) serving 5 x 8B models in parallel |
-| Auth | Clerk |
-| Search | Tavily |
-| Database | SQLite via SQLModel |
+|------|------|
+| Frontend | React + Vite + TS, Tailwind, **shadcn/ui** → **Cloudflare Pages** |
+| Backend | **FastAPI** → AMD droplet (**Docker** + **Nginx**) |
+| Models | **vLLM (ROCm)** — parallel 8B-class workers + **`curator`** endpoint |
+| Auth | **Clerk** (JWT verified with JWKS) |
+| Search | **Tavily** |
+| DB | **SQLite** + SQLModel |
 
-## Project Structure
+## Project layout
 
 ```
 majlis/
-├── agents/              # Project spec docs
-├── backend/             # FastAPI app
-│   ├── main.py
-│   ├── config.py
-│   ├── database.py
-│   ├── models.py        # SQLModel tables
-│   ├── llm.py           # vLLM client + Curator calls
-│   ├── scores.py        # Reputation system
-│   ├── search.py        # Tavily integration
-│   ├── auth.py          # Clerk JWT verification
-│   ├── seed_db.py       # Seed reputation scores
-│   ├── Dockerfile
-│   └── routers/
-│       ├── rooms.py
-│       ├── discuss.py   # SSE streaming
-│       ├── curator.py
-│       └── feedback.py
-├── frontend/            # React + Vite app
-│   ├── src/
-│   │   ├── pages/       # Landing, RoomSetup, DiscussionRoom
-│   │   ├── components/  # Room UI, ModelPicker
-│   │   ├── hooks/       # useDiscussion, useRoom
-│   │   └── lib/api.ts   # All API calls
-│   └── wrangler.toml    # Cloudflare Pages config
-├── docker-compose.yml   # Full AMD droplet deployment
-├── nginx.conf           # Reverse proxy + SSE support
+├── backend/           # FastAPI — routers/rooms, discuss, curator, feedback
+├── frontend/          # Vite app — Pages, hooks/useDiscussion, components/ui (shadcn)
+├── docker-compose.yml # vLLM × N + backend + nginx (droplet)
+├── nginx.conf
+├── docs/
+│   └── MAJLIS_SLIDES.html   # Print / Save as PDF (browser: Print → PDF)
 └── .env.example
 ```
 
-## Setup
-
-### 1. Get API keys
-
-- **Clerk**: https://clerk.com → create app → get publishable + secret keys
-- **Tavily**: https://tavily.com → sign up → get API key (free tier)
-- **HuggingFace**: https://huggingface.co → settings → access tokens (needed for Llama)
-
-### 2. Deploy backend on AMD MI300X Droplet
-
-```bash
-# On the droplet
-git clone <repo> && cd majlis
-
-# Copy and fill in env vars
-cp .env.example .env
-nano .env
-
-# Start all services (vLLM x5 + backend + nginx)
-docker compose up -d
-
-# First run downloads models (~30 GB total). Monitor:
-docker compose logs -f vllm-llama
-```
-
-Model download takes 10–20 min on first start. After that, startup is fast.
-
-### 3. Deploy frontend to Cloudflare Pages
-
-```bash
-cd frontend
-
-# Copy and fill in env vars
-cp .env.example .env.local
-# Set VITE_API_URL=https://your-droplet-ip
-# Set VITE_CLERK_PUBLISHABLE_KEY=pk_live_...
-
-# Build
-npm run build
-
-# Deploy to Cloudflare Pages
-npx wrangler pages deploy dist --project-name majlis
-```
-
-### 4. Local development
-
-```bash
-# Backend (needs vLLM running or models mocked)
-cd backend
-pip install -r requirements.txt
-cp ../.env.example .env && nano .env
-uvicorn main:app --reload
-
-# Frontend
-cd frontend
-npm install
-npm run dev
-```
-
-## Environment Variables
-
-See `.env.example` for all required variables.
-
-| Variable | Where | Purpose |
-|---|---|---|
-| `HF_TOKEN` | droplet `.env` | Download gated models (Llama) |
-| `TAVILY_API_KEY` | droplet `.env` | Web search capability |
-| `CLERK_SECRET_KEY` | droplet `.env` | Verify frontend JWTs |
-| `FRONTEND_ORIGIN` | droplet `.env` | CORS whitelist |
-| `VITE_API_URL` | `frontend/.env.local` | Backend URL |
-| `VITE_CLERK_PUBLISHABLE_KEY` | `frontend/.env.local` | Clerk frontend key |
-
-## Models
-
-| Key | Model | Port | Notes |
-|---|---|---|---|
-| `llama-3.1-8b` | Llama 3.1 8B Instruct | 8001 | Requires HF token |
-| `qwen2.5-7b` | Qwen 2.5 7B Instruct | 8002 | Thinking capable |
-| `mistral-7b` | Mistral 7B v0.3 | 8003 | Fast, general |
-| `deepseek-r1-8b` | DeepSeek R1 Distill 8B | 8004 | Best for reasoning |
-| `curator` | Qwen 2.5 0.5B Instruct | 8005 | Curator/moderator |
-
-## API Endpoints
+## Quick API reference
 
 | Method | Path | Purpose |
-|---|---|---|
-| `POST` | `/room/create` | Create room, get Curator recommendations |
-| `GET` | `/room/{id}` | Get room state |
-| `POST` | `/room/{id}/participant/add` | Add a model to the room |
-| `POST` | `/room/{id}/participant/{pid}/dismiss` | Dismiss a model |
-| `POST` | `/room/{id}/end` | End session + update scores |
-| `POST` | `/discuss` | SSE stream — all models respond |
-| `GET` | `/curator/warn` | Check reputation warning |
-| `GET` | `/curator/models` | List models with scores |
-| `GET` | `/health` | Health check |
+|--------|------|---------|
+| POST | `/room/create` | Create room + curator recommendations |
+| GET | `/rooms` | List user’s recent rooms |
+| GET | `/room/{id}` | Room state |
+| GET | `/room/{id}/messages` | Full transcript (`model_id`, `display_name`, layers) |
+| POST | `/discuss` | **SSE** stream — body: `message`, optional `target_participant_id`, `mode`, `force_web_search` |
+| GET | `/curator/discuss-prompts` | **Curator moves** (labels + instructions) |
+| GET | `/curator/models` | Models + reputation for category |
+| POST | `/room/{id}/participant/add` | Add model (`web_search`, `thinking`, `fast_mode`) |
+| POST | `/room/{id}/participant/{pid}/dismiss` | Kick + reason string |
+
+## Deploy (summary)
+
+1. **Droplet:** `docker compose up -d` with `.env` (`HF_TOKEN`, `TAVILY_API_KEY`, `CLERK_*`, `FRONTEND_ORIGIN`).
+2. **DNS:** Point `api.` and app host to droplet / Pages (Cloudflare proxy OK).
+3. **Frontend:** `VITE_API_URL`, `VITE_CLERK_PUBLISHABLE_KEY` → `npm run build` → Pages deploy (or GitHub Actions in `.github/workflows/`).
+
+**Note:** GitHub runners may be blocked from SSH to your droplet; backend updates can be `rsync` + `docker cp` + restart, or open SSH to Actions IPs.
+
+## Local dev
+
+```bash
+cd backend && pip install -r requirements.txt && uvicorn main:app --reload
+cd frontend && npm i && npm run dev
+```
+
+## Slides (PDF)
+
+Open `docs/MAJLIS_SLIDES.html` in a browser → **Print** → **Save as PDF** (simple, on-brand light layout).
+
+Or headless Chrome:  
+`google-chrome --headless --print-to-pdf=majlis-slides.pdf docs/MAJLIS_SLIDES.html`
+
+## Environment
+
+See `.env.example` for `HF_TOKEN`, `TAVILY_API_KEY`, `CLERK_SECRET_KEY`, `FRONTEND_ORIGIN`, model URLs, etc.
+
+## Models (typical)
+
+| Key | Role |
+|-----|------|
+| `llama-3.1-8b`, `qwen2.5-7b`, `mistral-7b`, `deepseek-r1-8b` | Panel |
+| `curator` | Routing, warnings, synthesis, discuss-prompt copy |
+
+Ports are wired in `docker-compose.yml` / `config.py`.

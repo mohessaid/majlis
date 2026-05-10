@@ -13,6 +13,55 @@ router = APIRouter()
 
 AVAILABLE_MODELS = [m for m in MODEL_IDS.keys() if m != "curator"]
 
+# Curator “moves” — user picks one; instruction is sent as the discuss-round directive.
+CURATOR_DISCUSS_PROMPTS = [
+    {
+        "id": "challenge",
+        "label": "Challenge",
+        "instruction": (
+            "Pick the weakest claim another active panelist made. Disagree with one concrete reason "
+            "and say what would change your mind. Stay civil."
+        ),
+    },
+    {
+        "id": "synthesize",
+        "label": "Find consensus",
+        "instruction": (
+            "Identify where the active panelists already agree and one precise point where they still diverge. "
+            "Propose a single crisp question to resolve that split."
+        ),
+    },
+    {
+        "id": "devils_advocate",
+        "label": "Devil's advocate",
+        "instruction": (
+            "Argue the strongest counter-position to the majority view among the active panelists. "
+            "One objection only — no hedging."
+        ),
+    },
+    {
+        "id": "vote_out_risk",
+        "label": "Rank / stress-test",
+        "instruction": (
+            "Each of you: rank the top 2 risks or unknowns implied by the others' answers. "
+            "No repetition — build on what was already said."
+        ),
+    },
+    {
+        "id": "next_step",
+        "label": "Next step",
+        "instruction": (
+            "Propose one actionable next step the user could take. If you disagree on the step, say why in one sentence."
+        ),
+    },
+]
+
+
+@router.get("/curator/discuss-prompts")
+async def discuss_prompts(user_id: str = Depends(get_current_user)):
+    """Ready-made Curator directives for inter-model discussion rounds."""
+    return {"prompts": CURATOR_DISCUSS_PROMPTS}
+
 
 @router.get("/curator/warn")
 async def curator_warn(

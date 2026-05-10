@@ -31,8 +31,10 @@ DEPTH_SYSTEM = (
 
 
 DISCUSS_SYSTEM = (
-    "You are {display_name} in a group discussion. The other models have shared their views. "
-    "Respond directly to what they said — agree with specifics, challenge a point, or add something they missed. "
+    "You are {display_name} in a group discussion. The other active models have shared their views. "
+    "Respond only to the participants named in the user's message under “Active panel only”. "
+    "Do not reference, quote, or build on anyone who was removed from the room — treat removed panelists as absent. "
+    "Engage with what the active panelists said — agree with specifics, challenge a point, or add what they missed. "
     "2-3 sentences max. No preamble."
 )
 
@@ -42,6 +44,7 @@ class DiscussRequest(BaseModel):
     target_participant_id: Optional[str] = None
     depth_surface_message_id: Optional[str] = None
     mode: Optional[str] = None  # "discuss" for inter-model discussion
+    force_web_search: Optional[bool] = False  # one shared Tavily pass for all panelists this round
 
 
 async def _stream_participant(
@@ -118,14 +121,17 @@ async def _generate_all_streams(
     message: str,
     layer: str,
     session: Session,
+    shared_search: Optional[list] = None,
 ) -> AsyncGenerator[bytes, None]:
     """Concurrently stream all participants, merging their outputs."""
     queues: list[asyncio.Queue] = [asyncio.Queue() for _ in participants]
 
     async def fill_queue(participant: Participant, q: asyncio.Queue, idx: int):
         caps = json.loads(participant.capabilities or "{}")
-        search_results = []
-        if caps.get("web_search"):
+        search_results: list = []
+        if shared_search:
+            search_results = list(shared_search)
+        elif caps.get("web_search"):
             search_results = await tavily_search(message)
 
         async for chunk in _stream_participant(participant, message, layer, search_results, session):
@@ -195,8 +201,17 @@ async def discuss(
     if not participants:
         raise HTTPException(status_code=400, detail="No active participants in room")
 
+    shared_search: Optional[list] = None
+    if body.force_web_search:
+        q = body.message.strip()
+        if len(q) > 500:
+            q = q[:500] + "…"
+        shared_search = await tavily_search(q)
+
     async def event_stream():
-        async for chunk in _generate_all_streams(participants, body.message, layer, session):
+        async for chunk in _generate_all_streams(
+            participants, body.message, layer, session, shared_search=shared_search
+        ):
             yield chunk
 
         # After depth expansion, run Curator shallow check
@@ -219,33 +234,32 @@ async def discuss(
             if surface_msg and depth_msg:
                 result = await check_shallow_response(surface_msg.content, depth_msg.content)
                 if result.get("is_shallow") and result.get("confidence", 0) > 0.75:
+                    shallow_text = (
+                        f"That sounded like the same answer with different words. "
+                        f"@{p.display_name} — what specifically changes if we go deeper on this?"
+                    )
                     curator_event = json.dumps({
                         "participant_id": "curator",
                         "model_id": "curator",
                         "layer": "curator",
-                        "chunk": (
-                            f"That sounded like the same answer with different words. "
-                            f"@{p.display_name} — what specifically changes if we go deeper on this?"
-                        ),
+                        "chunk": shallow_text,
                         "done": True,
                         "is_curator": True,
                     })
                     yield f"data: {curator_event}\n\n".encode()
 
-                    # Save curator message
                     curator_msg = Message(
                         id=str(uuid.uuid4()),
                         room_id=body.room_id,
                         participant_id=None,
                         layer="curator",
-                        content=curator_event,
+                        content=shallow_text,
                     )
                     session.add(curator_msg)
                     session.commit()
 
         # ── Curator synthesis after surface/discuss rounds ──────────────────
         if layer in ("surface", "discuss") and participants:
-            p_map = {p.id: p for p in participants}
             # Read what each model just wrote (most recent messages for this round)
             from sqlmodel import select as sel
             round_msgs = []
@@ -263,8 +277,8 @@ async def discuss(
                 context = "\n\n".join(f"{name}: {text[:400]}" for name, text in round_msgs)
                 question_short = body.message[:300]
                 # For discuss round, strip the preamble
-                if "[Discussion Round]" in question_short:
-                    question_short = "Follow-up discussion"
+                if question_short.startswith("Curator move:") or "Active panel only" in question_short:
+                    question_short = "Curator-led discussion round"
                 curator_messages = [
                     {"role": "system", "content": (
                         "You are a sharp debate moderator. In 1-2 short sentences: "

@@ -36,7 +36,6 @@ export function useDiscussion(
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const cancelRef = useRef<(() => void) | null>(null);
 
-  // Load history once on mount
   useEffect(() => {
     if (!roomId || historyLoaded) return;
     getToken().then((token) =>
@@ -97,11 +96,11 @@ export function useDiscussion(
       message: string,
       displayNames: Record<string, string>,
       targetParticipantId?: string,
-      mode?: string
+      mode?: string,
+      forceWebSearch?: boolean
     ) => {
       if (streaming) return;
 
-      // Always get a fresh token to avoid 401 from stale tokens
       const token = await getToken();
 
       setMessages((prev) => [
@@ -122,7 +121,13 @@ export function useDiscussion(
       setStreaming(true);
 
       const cancel = streamDiscussion(
-        { room_id: roomId, message, target_participant_id: targetParticipantId, mode },
+        {
+          room_id: roomId,
+          message,
+          target_participant_id: targetParticipantId,
+          mode,
+          force_web_search: !!forceWebSearch,
+        },
         token,
         (chunk: DiscussionChunk) => {
           if (chunk.done) {
@@ -148,15 +153,35 @@ export function useDiscussion(
   );
 
   const requestDiscussion = useCallback(
-    (lastResponses: MessageBubble[], displayNames: Record<string, string>) => {
-      if (streaming || lastResponses.length === 0) return;
-      const modelMsgs = lastResponses.filter((m) => m.layer !== "user" && m.layer !== "curator");
+    (
+      lastResponses: MessageBubble[],
+      displayNames: Record<string, string>,
+      prompt: { label: string; instruction: string },
+      activeParticipantIds: Set<string>,
+      forceWebSearch: boolean
+    ) => {
+      if (streaming) return;
+      const modelMsgs = lastResponses.filter(
+        (m) =>
+          m.layer !== "user" &&
+          m.layer !== "curator" &&
+          activeParticipantIds.has(m.participant_id)
+      );
       if (modelMsgs.length === 0) return;
       const context = modelMsgs
         .map((m) => `${m.display_name}: "${m.content.slice(0, 250)}${m.content.length > 250 ? "…" : ""}"`)
         .join("\n\n");
-      const message = `[Discussion Round]\n\n${context}`;
-      send(message, displayNames, undefined, "discuss");
+      const message = [
+        `Curator move: ${prompt.label}`,
+        "",
+        prompt.instruction,
+        "",
+        "Active panel only — do not reference anyone removed from the room.",
+        "",
+        "---",
+        context,
+      ].join("\n");
+      send(message, displayNames, undefined, "discuss", forceWebSearch);
     },
     [send, streaming]
   );

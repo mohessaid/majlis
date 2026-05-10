@@ -10,10 +10,19 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { modelTheme } from "@/lib/models"
 import { Spinner, ScoreBar, ModelAvatar, ModelTag } from "@/components/helpers"
-import { getRoom, dismissParticipant, endRoom, addParticipant, getAvailableModels, type Room, type ModelInfo } from "@/lib/api"
+import { getRoom, dismissParticipant, endRoom, addParticipant, getAvailableModels, getDiscussPrompts, type Room, type ModelInfo, type DiscussPrompt } from "@/lib/api"
 import { useDiscussion, type MessageBubble } from "@/hooks/useDiscussion"
 
 const DISMISS_REASONS = ["Too verbose", "Off topic", "Not helpful", "Repetitive"]
+
+function parseCuratorUserBubble(content: string): { label: string; preview: string } | null {
+  if (!content.startsWith("Curator move:")) return null
+  const lines = content.split("\n").map((l) => l.trim())
+  const label = lines[0].replace(/^Curator move:\s*/i, "").trim() || "Discussion"
+  const rest = lines.slice(1).join(" ").replace(/^-\-\-\s*/, "").trim()
+  const preview = rest.length > 180 ? rest.slice(0, 180) + "…" : rest
+  return { label, preview }
+}
 
 /* ── Turn grouping ───────────────────────────────────────────────── */
 interface Turn {
@@ -100,7 +109,7 @@ function ResponseStack({
           {/* Card footer: actions + navigation */}
           <div className="flex items-center justify-between border-t px-4 py-2">
             <div className="flex items-center gap-3">
-              {!active.streaming && active.layer === "surface" && (
+              {!active.streaming && (active.layer === "surface" || active.layer === "discuss") && (
                 <button
                   onClick={() => onDepth(active.participant_id)}
                   className="text-[11px] font-medium hover:underline transition-colors"
@@ -194,6 +203,8 @@ export function DiscussionRoom() {
   const [showEndModal, setShowEndModal] = useState(false)
   const [rating, setRating] = useState(0)
   const [ended, setEnded] = useState(false)
+  const [curatorPrompts, setCuratorPrompts] = useState<DiscussPrompt[]>([])
+  const [webDiscussRound, setWebDiscussRound] = useState(false)
   const threadRef = useRef<HTMLDivElement>(null)
 
   const { messages, streaming, historyLoaded, send, requestDepth, requestDiscussion } = useDiscussion(roomId!, getToken)
@@ -205,6 +216,15 @@ export function DiscussionRoom() {
       const data = await getRoom(roomId, t ?? undefined)
       setRoom(data)
     })()
+  }, [roomId])
+
+  useEffect(() => {
+    if (!roomId) return
+    getToken().then((t) =>
+      getDiscussPrompts(t ?? undefined)
+        .then(setCuratorPrompts)
+        .catch(() => setCuratorPrompts([]))
+    )
   }, [roomId])
 
   useEffect(() => {
@@ -294,9 +314,8 @@ export function DiscussionRoom() {
 
   const active = room.participants.filter((p) => !p.dismissed)
   const dismissed = room.participants.filter((p) => p.dismissed)
+  const activeParticipantIds = new Set(active.map((p) => p.id))
   const turns = groupTurns(messages)
-  const lastTurn = turns[turns.length - 1]
-  void (lastTurn)
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -446,20 +465,25 @@ export function DiscussionRoom() {
 
                     {/* User message */}
                     <div className="flex justify-end">
-                      <div className={cn(
-                        "max-w-lg rounded-2xl rounded-tr-sm px-4 py-3",
-                        turn.userMsg.content.startsWith("[Discussion Round]")
-                          ? "bg-blue-600"
-                          : "bg-primary"
-                      )}>
-                        {turn.userMsg.content.startsWith("[Discussion Round]") ? (
-                          <p className="text-xs text-blue-100 font-medium">🔄 Let them discuss</p>
-                        ) : (
-                          <p className="text-sm text-primary-foreground whitespace-pre-wrap leading-relaxed">
-                            {turn.userMsg.content}
-                          </p>
-                        )}
-                      </div>
+                      {(() => {
+                        const cm = parseCuratorUserBubble(turn.userMsg.content)
+                        if (cm) {
+                          return (
+                            <div className="max-w-lg rounded-2xl rounded-tr-sm bg-slate-900 px-4 py-3 text-left shadow-sm">
+                              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Curator move</p>
+                              <p className="mt-1 text-sm font-semibold text-white">{cm.label}</p>
+                              <p className="mt-1.5 text-xs text-slate-300 leading-relaxed">{cm.preview}</p>
+                            </div>
+                          )
+                        }
+                        return (
+                          <div className="max-w-lg rounded-2xl rounded-tr-sm bg-primary px-4 py-3">
+                            <p className="text-sm text-primary-foreground whitespace-pre-wrap leading-relaxed">
+                              {turn.userMsg.content}
+                            </p>
+                          </div>
+                        )
+                      })()}
                     </div>
 
                     {/* Curator intro messages */}
@@ -484,7 +508,7 @@ export function DiscussionRoom() {
                         msgs={turn.modelMsgs}
                         streaming={turnStreaming}
                         onDepth={(pid) => requestDepth(pid, displayNames)}
-                                        onKick={handleDismiss}
+                        onKick={handleDismiss}
                       />
                     )}
 
@@ -498,20 +522,53 @@ export function DiscussionRoom() {
                       </div>
                     )}
 
-                    {/* Post-turn actions (only on completed turns) */}
-                    {turnComplete && isLastTurn && (
-                      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed bg-muted/20 px-4 py-3">
-                        <p className="text-xs text-muted-foreground mr-1">What next?</p>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-xs gap-1.5"
-                          disabled={streaming}
-                          onClick={() => requestDiscussion(turn.modelMsgs, displayNames)}
-                        >
-                          🔄 Let them discuss
-                        </Button>
-                        <span className="text-muted-foreground/40 text-xs">or type a follow-up below</span>
+                    {/* Post-turn: Curator moves */}
+                    {turnComplete && isLastTurn && curatorPrompts.length > 0 && (
+                      <div className="space-y-2 rounded-xl border border-dashed bg-muted/20 px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-xs font-semibold text-foreground">Curator moves</p>
+                          <p className="text-[11px] text-muted-foreground">— pick how the panel should react next</p>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {curatorPrompts.map((p) => (
+                            <Button
+                              key={p.id}
+                              variant="secondary"
+                              size="sm"
+                              className="text-xs h-8"
+                              disabled={
+                                streaming ||
+                                turn.modelMsgs.filter((m) => activeParticipantIds.has(m.participant_id)).length === 0
+                              }
+                              onClick={() =>
+                                requestDiscussion(
+                                  turn.modelMsgs,
+                                  displayNames,
+                                  { label: p.label, instruction: p.instruction },
+                                  activeParticipantIds,
+                                  webDiscussRound
+                                )
+                              }
+                            >
+                              {p.label}
+                            </Button>
+                          ))}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                          <Button
+                            type="button"
+                            variant={webDiscussRound ? "default" : "outline"}
+                            size="sm"
+                            className="text-xs h-7"
+                            disabled={streaming}
+                            onClick={() => setWebDiscussRound((v) => !v)}
+                          >
+                            {webDiscussRound ? "✓ Web this round" : "Web this round"}
+                          </Button>
+                          <span className="text-[11px] text-muted-foreground">
+                            Shared Tavily search for everyone · per-model web still applies if enabled at join
+                          </span>
+                        </div>
                       </div>
                     )}
                   </div>
