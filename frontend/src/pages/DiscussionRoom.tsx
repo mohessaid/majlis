@@ -121,14 +121,14 @@ export function DiscussionRoom() {
     <div className="flex h-screen overflow-hidden bg-white">
 
       {/* ── Sidebar ────────────────────────────────────────────────────────── */}
-      <aside className="w-52 flex-shrink-0 flex flex-col border-r border-gray-100 bg-gray-50">
+      <aside className="w-56 flex-shrink-0 flex flex-col border-r border-gray-100 bg-gray-50">
 
         {/* Topic */}
         <div className="px-4 py-4 border-b border-gray-100">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-1">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-1.5">
             {room.category.replace("_", " ")}
           </p>
-          <p className="text-xs text-gray-600 leading-relaxed line-clamp-4">"{room.question}"</p>
+          <p className="text-xs text-gray-700 leading-relaxed line-clamp-5 font-medium">"{room.question}"</p>
         </div>
 
         {/* Participants */}

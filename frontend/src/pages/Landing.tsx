@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
 import { createRoom, addParticipant, type CreateRoomResponse, type Recommendation } from "../lib/api";
-import { Button, Card, Textarea, Spinner, CapToggle, ScoreBar, ModelAvatar, ModelTag, modelTheme, cn } from "../components/ui";
+import { Button, Textarea, Spinner, CapToggle, ScoreBar, ModelAvatar, ModelTag, modelTheme, cn } from "../components/ui";
 
 interface SelectedCaps { web_search: boolean; thinking: boolean; fast_mode: boolean; }
 interface Selection { model_id: string; display_name: string; caps: SelectedCaps; score: number; reason: string; }
@@ -61,145 +61,174 @@ export function Landing() {
     setSelections((prev) => prev.map((s) => s.model_id === id ? { ...s, caps: { ...s.caps, [cap]: val } } : s));
   }
 
+  /* ── STEP 1: Idle or loading ── */
   if (step === "idle" || (step === "loading" && !room)) {
     return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4">
-        <div className="w-full max-w-lg space-y-6">
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+        {/* Mini nav */}
+        <div className="flex items-center justify-between border-b border-gray-100 bg-white px-6 py-3">
+          <button onClick={() => navigate("/")} className="text-sm font-semibold text-gray-900 hover:text-gray-600 transition-colors">
+            ← Majlis
+          </button>
+          <span className="flex items-center gap-1.5 text-xs text-gray-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-green-500" /> 4 models online
+          </span>
+        </div>
 
-          {/* Header */}
-          <div className="text-center space-y-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs text-gray-500">
-              <span className="h-1.5 w-1.5 rounded-full bg-green-500" /> 5 models online
+        <div className="flex flex-1 items-center justify-center px-4">
+          <div className="w-full max-w-xl">
+            <div className="mb-8 space-y-1">
+              <h2 className="text-2xl font-bold text-gray-900">What do you want to discuss?</h2>
+              <p className="text-sm text-gray-500">The Curator will analyze your question and pick the right models.</p>
             </div>
-            <h1 className="text-4xl font-semibold tracking-tight text-gray-900">Majlis</h1>
-            <p className="text-gray-500 text-sm">Multiple AI minds. One discussion. One answer you can trust.</p>
-          </div>
 
-          {/* Form */}
-          <Card className="p-5 shadow-sm">
             <form onSubmit={analyze} className="space-y-3">
               <Textarea
-                rows={3}
-                placeholder="What do you want to discuss?"
+                rows={4}
+                placeholder="e.g. What's the best architecture for a multi-tenant SaaS app?"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 disabled={step === "loading"}
+                className="text-base"
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); analyze(e as unknown as FormEvent); } }}
               />
-              <Button type="submit" size="lg" className="w-full" disabled={!q.trim() || step === "loading"}>
-                {step === "loading" ? <><Spinner className="h-4 w-4" /> Analyzing…</> : "Analyze & Select Models"}
+              <Button type="submit" size="lg" className="w-full h-12 text-base" disabled={!q.trim() || step === "loading"}>
+                {step === "loading"
+                  ? <><Spinner className="h-4 w-4" /> Curator is analyzing…</>
+                  : "Analyze & Select Models →"}
               </Button>
+              {error && <p className="text-sm text-red-500">{error}</p>}
             </form>
-            {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
-          </Card>
 
-          {/* Model preview */}
-          <div className="flex items-center justify-center gap-2">
-            {["llama-3.1-8b", "qwen2.5-7b", "mistral-7b", "deepseek-r1-8b"].map((id) => (
-              <ModelTag key={id} modelId={id} />
-            ))}
+            <div className="mt-6 flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-gray-400">Available:</span>
+              {["llama-3.1-8b","qwen2.5-7b","mistral-7b","deepseek-r1-8b"].map((id) => (
+                <ModelTag key={id} modelId={id} />
+              ))}
+            </div>
           </div>
         </div>
       </div>
     );
   }
 
-  // Selection step
+  /* ── STEP 2: Model selection ── */
   const allRecs = room?.curator_recommendations ?? [];
-  const extraModels = (room?.all_models ?? []).filter(
-    (m) => !allRecs.find((r) => r.model_id === m.model_id)
-  );
+  const extras = (room?.all_models ?? []).filter((m) => !allRecs.find((r) => r.model_id === m.model_id));
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center px-4 py-10">
-      <div className="w-full max-w-lg space-y-4">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* Mini nav */}
+      <div className="flex items-center justify-between border-b border-gray-100 bg-white px-6 py-3">
+        <button onClick={() => { setStep("idle"); setRoom(null); setSelections([]); }}
+          className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-700 transition-colors">
+          ← Back
+        </button>
+        <span className="flex items-center gap-1.5 text-xs text-gray-400">
+          <span className="h-1.5 w-1.5 rounded-full bg-green-500" /> 4 models online
+        </span>
+      </div>
 
-        {/* Back + question */}
-        <div>
-          <button onClick={() => { setStep("idle"); setRoom(null); setSelections([]); }}
-            className="mb-3 flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors">
-            ← Back
-          </button>
-          <Card className="p-4">
-            <p className="mb-1 text-[11px] font-medium uppercase tracking-widest text-gray-400">Question</p>
-            <p className="text-sm font-medium text-gray-800">"{q}"</p>
-          </Card>
-        </div>
+      <div className="flex flex-1 items-start justify-center px-4 py-10">
+        <div className="w-full max-w-xl space-y-5">
 
-        {/* Curator analysis */}
-        {room?.curator_notes && (
-          <div className="flex gap-3 rounded-xl border border-gray-200 bg-white p-4">
-            <ModelAvatar modelId="curator" size="sm" />
-            <div>
-              <p className="mb-0.5 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Curator</p>
-              <p className="text-sm text-gray-700">{room.curator_notes}</p>
+          {/* Question */}
+          <div className="rounded-xl border border-gray-200 bg-white p-4">
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Your Question</p>
+            <p className="text-sm text-gray-800 font-medium leading-relaxed">"{q}"</p>
+          </div>
+
+          {/* Curator note */}
+          {room?.curator_notes && (
+            <div className="flex gap-3 rounded-xl border border-gray-200 bg-white p-4">
+              <ModelAvatar modelId="curator" size="md" />
+              <div>
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-widest text-gray-400">Curator Analysis</p>
+                <p className="text-sm text-gray-700 leading-relaxed">{room.curator_notes}</p>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Model list */}
-        <div>
-          <div className="mb-2 flex items-center justify-between px-0.5">
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Recommended</p>
-            <span className="text-xs text-gray-400">{selections.length} selected</span>
-          </div>
+          {/* Models */}
+          <div>
+            <div className="mb-3 flex items-center justify-between">
+              <p className="text-sm font-semibold text-gray-700">Select your models</p>
+              <span className="text-xs text-gray-400">{selections.length} selected</span>
+            </div>
 
-          <div className="space-y-2">
-            {allRecs.map((rec) => {
-              const active = !!selections.find((s) => s.model_id === rec.model_id);
-              const sel = selections.find((s) => s.model_id === rec.model_id);
-              const t = modelTheme(rec.model_id);
-              return (
-                <Card key={rec.model_id}
-                  className={cn("p-4 cursor-pointer select-none transition-all", active ? "shadow-sm" : "opacity-60 hover:opacity-80")}
-                  onClick={() => toggle(rec)}>
-                  <div className="flex items-start gap-3">
-                    <ModelAvatar modelId={rec.model_id} size="md" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="text-sm font-semibold" style={{ color: t.text }}>{t.label}</span>
-                        <div className="w-24 flex-shrink-0"><ScoreBar score={rec.reputation_score} /></div>
-                      </div>
-                      <p className="text-xs text-gray-500 mb-2 leading-relaxed">{rec.reason}</p>
-                      {active && sel && (
-                        <div className="flex gap-1.5 flex-wrap" onClick={(e) => e.stopPropagation()}>
-                          <CapToggle checked={sel.caps.web_search} onChange={(v) => setCap(rec.model_id, "web_search", v)} label="Web search" />
-                          <CapToggle checked={sel.caps.thinking} onChange={(v) => setCap(rec.model_id, "thinking", v)} label="Thinking" />
-                          <CapToggle checked={sel.caps.fast_mode} onChange={(v) => setCap(rec.model_id, "fast_mode", v)} label="Fast" />
+            <div className="space-y-2">
+              {allRecs.map((rec) => {
+                const active = !!selections.find((s) => s.model_id === rec.model_id);
+                const sel = selections.find((s) => s.model_id === rec.model_id);
+                const t = modelTheme(rec.model_id);
+                return (
+                  <div
+                    key={rec.model_id}
+                    className={cn(
+                      "rounded-xl border bg-white p-4 cursor-pointer select-none transition-all",
+                      active ? "border-gray-300 shadow-sm" : "border-gray-100 hover:border-gray-200"
+                    )}
+                    onClick={() => toggle(rec)}
+                  >
+                    <div className="flex items-start gap-3">
+                      <ModelAvatar modelId={rec.model_id} size="md" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-sm font-semibold" style={{ color: t.text }}>{t.label}</span>
+                          <div className="flex-1 max-w-[100px]"><ScoreBar score={rec.reputation_score} /></div>
                         </div>
-                      )}
-                    </div>
-                    {/* Checkbox */}
-                    <div className={cn("mt-0.5 h-4 w-4 flex-shrink-0 rounded-full border-2 flex items-center justify-center transition-all",
-                      active ? "border-gray-900" : "border-gray-300")}>
-                      {active && <div className="h-2 w-2 rounded-full bg-gray-900" />}
+                        <p className="text-xs text-gray-500 leading-relaxed mb-2">{rec.reason}</p>
+                        {active && sel && (
+                          <div className="flex gap-2 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                            <CapToggle checked={sel.caps.web_search} onChange={(v) => setCap(rec.model_id, "web_search", v)} label="Web search" />
+                            <CapToggle checked={sel.caps.thinking} onChange={(v) => setCap(rec.model_id, "thinking", v)} label="Thinking" />
+                            <CapToggle checked={sel.caps.fast_mode} onChange={(v) => setCap(rec.model_id, "fast_mode", v)} label="Fast" />
+                          </div>
+                        )}
+                      </div>
+                      {/* Checkbox */}
+                      <div className={cn(
+                        "mt-0.5 h-5 w-5 flex-shrink-0 rounded-full border-2 flex items-center justify-center transition-all",
+                        active ? "border-gray-900 bg-gray-900" : "border-gray-300"
+                      )}>
+                        {active && (
+                          <svg className="h-3 w-3 text-white" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="2,6 5,9 10,3" />
+                          </svg>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </Card>
-              );
-            })}
+                );
+              })}
 
-            {extraModels.map((m) => (
-              <Card key={m.model_id}
-                className="p-3 cursor-pointer opacity-40 hover:opacity-60 transition-opacity"
-                onClick={() => toggle({ model_id: m.model_id, display_name: m.display_name, reputation_score: m.score, reason: "Added manually", suggested_capabilities: { web_search: false, thinking: false, fast_mode: false } })}>
-                <div className="flex items-center gap-3">
+              {extras.map((m) => (
+                <div
+                  key={m.model_id}
+                  className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-gray-200 p-3 hover:border-gray-300 hover:bg-white transition-all"
+                  onClick={() => toggle({ model_id: m.model_id, display_name: m.display_name, reputation_score: m.score, reason: "Added manually", suggested_capabilities: { web_search: false, thinking: false, fast_mode: false } })}
+                >
                   <ModelAvatar modelId={m.model_id} size="sm" />
-                  <span className="text-sm text-gray-600">{modelTheme(m.model_id).label}</span>
-                  <span className="ml-auto text-xs text-gray-400">+ Add</span>
+                  <span className="text-sm text-gray-500">{modelTheme(m.model_id).label}</span>
+                  <span className="ml-auto text-xs text-gray-400 font-medium">+ Add</span>
                 </div>
-              </Card>
-            ))}
+              ))}
+            </div>
           </div>
+
+          {error && <p className="text-sm text-red-500">{error}</p>}
+
+          <Button
+            size="lg"
+            className="w-full h-12 text-base"
+            disabled={selections.length === 0 || step === "starting"}
+            onClick={start}
+          >
+            {step === "starting"
+              ? <><Spinner className="h-4 w-4" /> Starting…</>
+              : `Open the Room with ${selections.length} model${selections.length !== 1 ? "s" : ""} →`}
+          </Button>
         </div>
-
-        {error && <p className="text-xs text-red-500">{error}</p>}
-
-        <Button size="lg" className="w-full" disabled={selections.length === 0 || step === "starting"} onClick={start}>
-          {step === "starting"
-            ? <><Spinner className="h-4 w-4" /> Starting…</>
-            : `Start Discussion with ${selections.length} model${selections.length !== 1 ? "s" : ""} →`}
-        </Button>
       </div>
     </div>
   );
