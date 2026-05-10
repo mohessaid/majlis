@@ -14,8 +14,8 @@ x-vllm-common: &vllm-common
     - "/dev/kfd"
     - "/dev/dri"
   group_add:
-    - video
-    - render
+    - "44"    # video
+    - "992"   # render
   volumes:
     - hf_cache:/root/.cache/huggingface
   environment:
@@ -57,7 +57,7 @@ services:
     container_name: majlis-vllm-llama
     command: >
       python -m vllm.entrypoints.openai.api_server
-      --model meta-llama/Llama-3.1-8B-Instruct
+      --model unsloth/Meta-Llama-3.1-8B-Instruct
       --host 0.0.0.0
       --port 8001
       --max-model-len 8192
