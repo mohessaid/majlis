@@ -69,7 +69,7 @@ cd frontend && npm i && npm run dev
 
 **`docs/MAJLIS_SLIDES.pdf`** — 16-slide deck (thesis, product depth, architecture, API sketch, security, trade-offs, roadmap, demo script). Source: `docs/MAJLIS_SLIDES.html`.
 
-Regenerate: open the HTML → **Print** → **Save as PDF**, or:
+Regenerate: open the HTML → **Print** → **Save as PDF** (set margins to **Default** or **Minimum** so `@page` in the file controls the box). Or:
 
 `google-chrome --headless --no-pdf-header-footer --print-to-pdf=docs/MAJLIS_SLIDES.pdf file://$(pwd)/docs/MAJLIS_SLIDES.html`
 

@@ -13,23 +13,25 @@
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
+
+    /* --- Screen: one slide ≈ one viewport (scroll), not a print page --- */
     .slide {
       min-height: 100vh;
       max-width: 900px;
       margin: 0 auto;
-      padding: 56px 56px 72px;
+      padding: 56px 56px 32px;
       display: flex;
       flex-direction: column;
       justify-content: center;
-      page-break-after: always;
       position: relative;
       background: #fff;
       border-left: 4px solid #27272a;
       box-shadow: 0 1px 0 rgba(0,0,0,0.06);
+      border-bottom: 1px solid #e4e4e7;
     }
     .slide--hero {
       justify-content: flex-end;
-      padding-bottom: 88px;
+      padding-bottom: 72px;
     }
     .slide--hero h1 { font-size: 3.1rem; }
     .kicker {
@@ -90,17 +92,17 @@
       white-space: pre-wrap;
       margin: 0;
     }
+    .slide__main { flex: 1 1 auto; min-height: 0; }
     .footnote {
-      position: absolute;
-      bottom: 28px;
-      left: 56px;
-      right: 56px;
+      flex-shrink: 0;
+      margin-top: 1.75rem;
+      padding-top: 0.75rem;
       font-size: 0.72rem;
       color: #a1a1aa;
       border-top: 1px solid #e4e4e7;
-      padding-top: 12px;
       display: flex;
       justify-content: space-between;
+      gap: 1rem;
     }
     code {
       font-family: ui-monospace, monospace;
@@ -109,15 +111,68 @@
       padding: 0.1em 0.35em;
       border-radius: 4px;
     }
+
+    /* --- Print / PDF: hard page boundaries, no bleed across sheets --- */
+    @page {
+      size: A4 portrait;
+      margin: 12mm;
+    }
+
     @media print {
-      body { background: #fff; }
-      .slide {
-        min-height: 280mm;
-        box-shadow: none;
-        page-break-after: always;
-        padding: 48px 48px 64px;
+      html, body {
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #fff !important;
       }
-      .footnote { bottom: 20px; left: 48px; right: 48px; }
+      .slide {
+        /* Exactly one physical page worth of area inside @page margins */
+        width: 100%;
+        max-width: none;
+        margin: 0;
+        padding: 2mm 0 6mm 10px;
+        min-height: 0 !important;
+        height: 273mm; /* ~297mm A4 − 12mm×2 margins; keeps one slide = one page */
+        max-height: 273mm;
+        overflow: hidden; /* clip rare overflow instead of mid-slide page break */
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-start;
+        page-break-after: always;
+        page-break-inside: avoid;
+        break-inside: avoid;
+        break-after: page;
+        border-left: 3px solid #27272a;
+        box-shadow: none;
+        border-bottom: none;
+      }
+      .slide:first-of-type { padding-top: 4mm; }
+      .slide:last-of-type {
+        page-break-after: auto;
+        break-after: auto;
+      }
+      .slide--hero {
+        justify-content: center;
+        padding-bottom: 12mm;
+      }
+      .slide--hero h1 { font-size: 2.4rem; }
+      h1 { font-size: 1.75rem; margin-bottom: 0.65rem; }
+      .lead { font-size: 1.05rem; max-width: none; }
+      p, li { font-size: 0.88rem; line-height: 1.45; }
+      .muted { font-size: 0.8rem; }
+      ul { margin-top: 0.5rem; }
+      li { margin-bottom: 0.35rem; }
+      .box { padding: 0.65rem 0.75rem; margin-top: 0.65rem; page-break-inside: avoid; break-inside: avoid; }
+      pre.code { font-size: 0.65rem; line-height: 1.4; }
+      .cols { gap: 1rem; margin-top: 0.75rem; page-break-inside: avoid; break-inside: avoid; }
+      .slide__main { flex: 1 1 auto; overflow: hidden; }
+      .footnote {
+        margin-top: auto;
+        padding-top: 6px;
+        font-size: 0.68rem;
+      }
+      .demo-list { font-size: 0.88rem !important; line-height: 1.45 !important; }
+      .demo-list li { font-size: inherit !important; margin-bottom: 0.3rem !important; }
     }
   </style>
 </head>
@@ -125,206 +180,238 @@
 
   <!-- 1 -->
   <section class="slide slide--hero">
-    <p class="kicker">Multi-LLM product · AMD hackathon · 2026</p>
-    <h1>Majlis</h1>
-    <p class="lead">A moderated council of models—not a single optimising oracle. You set the agenda; the Curator shapes the panel; answers compete, clarify, and earn (or lose) trust.</p>
+    <div class="slide__main">
+      <p class="kicker">Multi-LLM product · AMD hackathon · 2026</p>
+      <h1>Majlis</h1>
+      <p class="lead">A moderated council of models—not a single optimising oracle. You set the agenda; the Curator shapes the panel; answers compete, clarify, and earn (or lose) trust.</p>
+    </div>
     <div class="footnote"><span>Mohamed · majlis.mohessaid.com</span><span>1 / 16</span></div>
   </section>
 
   <!-- 2 -->
   <section class="slide">
-    <p class="kicker">Thesis</p>
-    <h1>Reasoning improves when opinions can disagree</h1>
-    <p>One model tends to hedge, over-explain, and hallucinate with high confidence. Real deliberation—assumptions surfaced, weak claims challenged—needs <strong>multiple voices</strong> and a <strong>human moderator</strong> who can steer, cut, and reward.</p>
-    <p class="muted">Majlis is that pattern productised: parallel responses, structured rounds, explicit kicks, and a small “Curator” model that routes, synthesises, and nudges—without replacing the user’s judgment.</p>
+    <div class="slide__main">
+      <p class="kicker">Thesis</p>
+      <h1>Reasoning improves when opinions can disagree</h1>
+      <p>One model tends to hedge, over-explain, and hallucinate with high confidence. Real deliberation—assumptions surfaced, weak claims challenged—needs <strong>multiple voices</strong> and a <strong>human moderator</strong> who can steer, cut, and reward.</p>
+      <p class="muted">Majlis is that pattern productised: parallel responses, structured rounds, explicit kicks, and a small “Curator” model that routes, synthesises, and nudges—without replacing the user’s judgment.</p>
+    </div>
     <div class="footnote"><span></span><span>2 / 16</span></div>
   </section>
 
   <!-- 3 -->
   <section class="slide">
-    <p class="kicker">Problem</p>
-    <h1>What’s broken in chat-with-one-LLM</h1>
-    <ul>
-      <li><strong>No comparability.</strong> You get one narrative. Hard to see trade-offs or alternative framings without hand-rolling your own adversarial prompts.</li>
-      <li><strong>Length inflation.</strong> Models optimise for completeness, not clarity—exactly wrong when you need a decision or a crisp critique.</li>
-      <li><strong>Static trust.</strong> Users can’t down-rank a bad answer in a way the system remembers; vendors rarely expose per-model accountability in the UI.</li>
-    </ul>
+    <div class="slide__main">
+      <p class="kicker">Problem</p>
+      <h1>What’s broken in chat-with-one-LLM</h1>
+      <ul>
+        <li><strong>No comparability.</strong> You get one narrative. Hard to see trade-offs or alternative framings without hand-rolling your own adversarial prompts.</li>
+        <li><strong>Length inflation.</strong> Models optimise for completeness, not clarity—exactly wrong when you need a decision or a crisp critique.</li>
+        <li><strong>Static trust.</strong> Users can’t down-rank a bad answer in a way the system remembers; vendors rarely expose per-model accountability in the UI.</li>
+      </ul>
+    </div>
     <div class="footnote"><span></span><span>3 / 16</span></div>
   </section>
 
   <!-- 4 -->
   <section class="slide">
-    <p class="kicker">Audience</p>
-    <h1>Who this is for</h1>
-    <div class="cols">
-      <div>
-        <ul>
-          <li><strong>Builders & researchers</strong> comparing approaches (architectures, methodologies, risks).</li>
-          <li><strong>Power users</strong> who want structured debate instead of endless follow-ups to one bot.</li>
-        </ul>
+    <div class="slide__main">
+      <p class="kicker">Audience</p>
+      <h1>Who this is for</h1>
+      <div class="cols">
+        <div>
+          <ul>
+            <li><strong>Builders & researchers</strong> comparing approaches (architectures, methodologies, risks).</li>
+            <li><strong>Power users</strong> who want structured debate instead of endless follow-ups to one bot.</li>
+          </ul>
+        </div>
+        <div>
+          <ul>
+            <li><strong>Hackathon / demo contexts</strong> where showing multi-GPU inference and real product UX matters.</li>
+          </ul>
+        </div>
       </div>
-      <div>
-        <ul>
-          <li><strong>Hackathon / demo contexts</strong> where showing multi-GPU inference and real product UX matters.</li>
-        </ul>
+      <div class="box">
+        <div class="box-title">Design goal</div>
+        <p class="muted" style="margin:0">Concise turns, visible panelists, persistent history, and hooks for reputation so “good models” and “noise” separate over sessions—not just within one chat.</p>
       </div>
-    </div>
-    <div class="box">
-      <div class="box-title">Design goal</div>
-      <p class="muted" style="margin:0">Concise turns, visible panelists, persistent history, and hooks for reputation so “good models” and “noise” separate over sessions—not just within one chat.</p>
     </div>
     <div class="footnote"><span></span><span>4 / 16</span></div>
   </section>
 
   <!-- 5 -->
   <section class="slide">
-    <p class="kicker">Product</p>
-    <h1>How Majlis works (user journey)</h1>
-    <ul>
-      <li><strong>Ask once.</strong> You post a question. The Curator classifies the topic and recommends a shortlist from the available pool.</li>
-      <li><strong>Pick the panel.</strong> You choose who gets a seat and toggles capabilities (e.g. web search, “fast” mode) per model before the room opens.</li>
-      <li><strong>Round-based discussion.</strong> Each of your prompts starts a round: all active models answer in parallel (streamed), shown as stacked cards so you can scan without scrolling a wall of text.</li>
-      <li><strong>Curator moves.</strong> After a round, you trigger structured prompts—challenge, find consensus, devil’s advocate—so the next turn is <em>inter-model dialogue</em>, not a blind re-ask.</li>
-      <li><strong>Kick + structured feedback.</strong> Removing a panelist excludes their prior lines from <em>follow-up</em> discussion context so the room doesn’t keep “debating ghosts.”</li>
-    </ul>
+    <div class="slide__main">
+      <p class="kicker">Product</p>
+      <h1>How Majlis works (user journey)</h1>
+      <ul>
+        <li><strong>Ask once.</strong> You post a question. The Curator classifies the topic and recommends a shortlist from the available pool.</li>
+        <li><strong>Pick the panel.</strong> You choose who gets a seat and toggles capabilities (e.g. web search, “fast” mode) per model before the room opens.</li>
+        <li><strong>Round-based discussion.</strong> Each of your prompts starts a round: all active models answer in parallel (streamed), shown as stacked cards so you can scan without scrolling a wall of text.</li>
+        <li><strong>Curator moves.</strong> After a round, you trigger structured prompts—challenge, find consensus, devil’s advocate—so the next turn is <em>inter-model dialogue</em>, not a blind re-ask.</li>
+        <li><strong>Kick + structured feedback.</strong> Removing a panelist excludes their prior lines from <em>follow-up</em> discussion context so the room doesn’t keep “debating ghosts.”</li>
+      </ul>
+    </div>
     <div class="footnote"><span></span><span>5 / 16</span></div>
   </section>
 
   <!-- 6 -->
   <section class="slide">
-    <p class="kicker">Curator</p>
-    <h1>Not a fifth participant—an operator</h1>
-    <p>The Curator is a <strong>small, fast model</strong> used for: routing recommendations, optional warnings on weak reputations, <strong>end-of-round synthesis</strong> (agreement vs tension in one or two sentences), shallow-response checks after “go deeper,” and <strong>server-defined discuss prompts</strong> (<code>GET /curator/discuss-prompts</code>) so the UI isn’t hard-coding debate choreography.</p>
-    <p class="muted">This keeps the product feel intentional: the user sees “Curator move: Challenge” as a first-class action, not an opaque system message.</p>
+    <div class="slide__main">
+      <p class="kicker">Curator</p>
+      <h1>Not a fifth participant—an operator</h1>
+      <p>The Curator is a <strong>small, fast model</strong> used for: routing recommendations, optional warnings on weak reputations, <strong>end-of-round synthesis</strong> (agreement vs tension in one or two sentences), shallow-response checks after “go deeper,” and <strong>server-defined discuss prompts</strong> (<code>GET /curator/discuss-prompts</code>) so the UI isn’t hard-coding debate choreography.</p>
+      <p class="muted">This keeps the product feel intentional: the user sees “Curator move: Challenge” as a first-class action, not an opaque system message.</p>
+    </div>
     <div class="footnote"><span></span><span>6 / 16</span></div>
   </section>
 
   <!-- 7 -->
   <section class="slide">
-    <p class="kicker">Technical core</p>
-    <h1>Inference & orchestration</h1>
-    <ul>
-      <li><strong>vLLM on AMD (ROCm)</strong>—one OpenAI-compatible server per panel model (typ. 8B-class instruct checkpoints) plus a dedicated curator endpoint.</li>
-      <li><strong>Parallel streaming.</strong> <code>POST /discuss</code> fans out concurrent generation, merges Server-Sent Events, and persists each completed assistant message with layer metadata (<code>surface</code>, <code>depth</code>, <code>discuss</code>, <code>curator</code>).</li>
-      <li><strong>Token discipline.</strong> Discuss rounds use tighter caps so outputs stay comparable; depth rounds can expand when the user explicitly goes deeper on one panelist.</li>
-    </ul>
-    <div class="box">
-      <div class="box-title">Request surface (conceptual)</div>
-      <pre class="code">POST /discuss
+    <div class="slide__main">
+      <p class="kicker">Technical core</p>
+      <h1>Inference & orchestration</h1>
+      <ul>
+        <li><strong>vLLM on AMD (ROCm)</strong>—one OpenAI-compatible server per panel model (typ. 8B-class instruct checkpoints) plus a dedicated curator endpoint.</li>
+        <li><strong>Parallel streaming.</strong> <code>POST /discuss</code> fans out concurrent generation, merges Server-Sent Events, and persists each completed assistant message with layer metadata (<code>surface</code>, <code>depth</code>, <code>discuss</code>, <code>curator</code>).</li>
+        <li><strong>Token discipline.</strong> Discuss rounds use tighter caps so outputs stay comparable; depth rounds can expand when the user explicitly goes deeper on one panelist.</li>
+      </ul>
+      <div class="box">
+        <div class="box-title">Request surface (conceptual)</div>
+        <pre class="code">POST /discuss
   { room_id, message, target_participant_id?, mode?: "discuss",
     force_web_search?: bool }
 → SSE: { participant_id, model_id, chunk | done, layer }</pre>
+      </div>
     </div>
     <div class="footnote"><span></span><span>7 / 16</span></div>
   </section>
 
   <!-- 8 -->
   <section class="slide">
-    <p class="kicker">Data & state</p>
-    <h1>Rooms, messages, reputation</h1>
-    <ul>
-      <li><strong>SQLite + SQLModel</strong> for rooms, participants, messages, and score records—simple to ship, easy to snapshot for demos.</li>
-      <li><strong>History API</strong> reloads the full transcript with <code>model_id</code> and display names so the UI colours and stacks stay consistent after refresh.</li>
-      <li><strong>Dismissals</strong> store multi-label feedback strings; backend adjusts reputation and can suggest replacements—closing the loop between UX and scoring.</li>
-    </ul>
+    <div class="slide__main">
+      <p class="kicker">Data & state</p>
+      <h1>Rooms, messages, reputation</h1>
+      <ul>
+        <li><strong>SQLite + SQLModel</strong> for rooms, participants, messages, and score records—simple to ship, easy to snapshot for demos.</li>
+        <li><strong>History API</strong> reloads the full transcript with <code>model_id</code> and display names so the UI colours and stacks stay consistent after refresh.</li>
+        <li><strong>Dismissals</strong> store multi-label feedback strings; backend adjusts reputation and can suggest replacements—closing the loop between UX and scoring.</li>
+      </ul>
+    </div>
     <div class="footnote"><span></span><span>8 / 16</span></div>
   </section>
 
   <!-- 9 -->
   <section class="slide">
-    <p class="kicker">Tools</p>
-    <h1>Grounding without drowning in context</h1>
-    <p><strong>Tavily</strong> backs optional web retrieval: either per-panelist when “web search” was enabled at join, or a <strong>single shared search</strong> for the whole round when the user toggles “Web this round”—one query, results prepended for every active model so behaviour stays aligned.</p>
-    <p class="muted">The Curator’s synthesis and the discuss instructions both emphasise concision so search snippets augment answers instead of becoming copy-paste padding.</p>
+    <div class="slide__main">
+      <p class="kicker">Tools</p>
+      <h1>Grounding without drowning in context</h1>
+      <p><strong>Tavily</strong> backs optional web retrieval: either per-panelist when “web search” was enabled at join, or a <strong>single shared search</strong> for the whole round when the user toggles “Web this round”—one query, results prepended for every active model so behaviour stays aligned.</p>
+      <p class="muted">The Curator’s synthesis and the discuss instructions both emphasise concision so search snippets augment answers instead of becoming copy-paste padding.</p>
+    </div>
     <div class="footnote"><span></span><span>9 / 16</span></div>
   </section>
 
   <!-- 10 -->
   <section class="slide">
-    <p class="kicker">Frontend</p>
-    <h1>Experience layer</h1>
-    <ul>
-      <li><strong>React + Vite + TypeScript</strong>, Tailwind v4, <strong>shadcn/ui</strong> for production-grade primitives (not bespoke CSS soup).</li>
-      <li><strong>Clerk</strong> for auth; tokens refreshed before each streamed call to avoid silent 401s on long sessions.</li>
-      <li><strong>Cloudflare Pages</strong> for static hosting at the edge; API on the GPU droplet behind Nginx and Cloudflare DNS/proxy.</li>
-    </ul>
+    <div class="slide__main">
+      <p class="kicker">Frontend</p>
+      <h1>Experience layer</h1>
+      <ul>
+        <li><strong>React + Vite + TypeScript</strong>, Tailwind v4, <strong>shadcn/ui</strong> for production-grade primitives (not bespoke CSS soup).</li>
+        <li><strong>Clerk</strong> for auth; tokens refreshed before each streamed call to avoid silent 401s on long sessions.</li>
+        <li><strong>Cloudflare Pages</strong> for static hosting at the edge; API on the GPU droplet behind Nginx and Cloudflare DNS/proxy.</li>
+      </ul>
+    </div>
     <div class="footnote"><span></span><span>10 / 16</span></div>
   </section>
 
   <!-- 11 -->
   <section class="slide">
-    <p class="kicker">Security & ops</p>
-    <h1>Trust boundaries we care about</h1>
-    <ul>
-      <li><strong>JWT verification via JWKS</strong> (Clerk)—no “trust this header” shortcuts on mutating routes.</li>
-      <li><strong>CORS</strong> locked to known frontend origins; secrets stay on the server (Tavily, HF, Clerk secret, model keys).</li>
-      <li><strong>Deployment reality:</strong> CI SSH to a home-lab GPU host often fails (firewall); production updates may be rsync + container restart—documented so the team isn’t blocked.</li>
-    </ul>
+    <div class="slide__main">
+      <p class="kicker">Security & ops</p>
+      <h1>Trust boundaries we care about</h1>
+      <ul>
+        <li><strong>JWT verification via JWKS</strong> (Clerk)—no “trust this header” shortcuts on mutating routes.</li>
+        <li><strong>CORS</strong> locked to known frontend origins; secrets stay on the server (Tavily, HF, Clerk secret, model keys).</li>
+        <li><strong>Deployment reality:</strong> CI SSH to a home-lab GPU host often fails (firewall); production updates may be rsync + container restart—documented so the team isn’t blocked.</li>
+      </ul>
+    </div>
     <div class="footnote"><span></span><span>11 / 16</span></div>
   </section>
 
   <!-- 12 -->
   <section class="slide">
-    <p class="kicker">System view</p>
-    <h1>End-to-end path</h1>
-    <div class="box">
-      <pre class="code">Browser (Pages) ──HTTPS──► Cloudflare
+    <div class="slide__main">
+      <p class="kicker">System view</p>
+      <h1>End-to-end path</h1>
+      <div class="box">
+        <pre class="code">Browser (Pages) ──HTTPS──► Cloudflare
                               │
                               ├─► api.*  ─► Nginx ─► FastAPI
                               │              │
                               │              └─► SQLite
                               │
                               └─► vLLM :8001…8005 (ROCm, MI300-class droplet)</pre>
+      </div>
+      <p class="muted" style="margin-top:1rem">SSE streams flow from FastAPI through Nginx to the browser; message bodies are committed after each stream completes so history survives refresh and re-entry.</p>
     </div>
-    <p class="muted" style="margin-top:1rem">SSE streams flow from FastAPI through Nginx to the browser; message bodies are committed after each stream completes so history survives refresh and re-entry.</p>
     <div class="footnote"><span></span><span>12 / 16</span></div>
   </section>
 
   <!-- 13 -->
   <section class="slide">
-    <p class="kicker">Trade-offs</p>
-    <h1>What we optimised for—and what we didn’t</h1>
-    <ul>
-      <li><strong>For:</strong> Demo clarity, multi-model parallelism, and a believable “product” narrative in hackathon time.</li>
-      <li><strong>Against:</strong> Cross-room analytics, enterprise SSO, fine-grained billing, and exhaustive prompt-injection hardening—those are next-layer work.</li>
-      <li><strong>Compute:</strong> Five 8B servers are heavy; the architecture assumes a capable GPU host, not a laptop-only plan.</li>
-    </ul>
+    <div class="slide__main">
+      <p class="kicker">Trade-offs</p>
+      <h1>What we optimised for—and what we didn’t</h1>
+      <ul>
+        <li><strong>For:</strong> Demo clarity, multi-model parallelism, and a believable “product” narrative in hackathon time.</li>
+        <li><strong>Against:</strong> Cross-room analytics, enterprise SSO, fine-grained billing, and exhaustive prompt-injection hardening—those are next-layer work.</li>
+        <li><strong>Compute:</strong> Five 8B servers are heavy; the architecture assumes a capable GPU host, not a laptop-only plan.</li>
+      </ul>
+    </div>
     <div class="footnote"><span></span><span>13 / 16</span></div>
   </section>
 
   <!-- 14 -->
   <section class="slide">
-    <p class="kicker">Roadmap (honest)</p>
-    <h1>What would make this production-grad</h1>
-    <ul>
-      <li><strong>Voting / resolution objects</strong>—explicit “the room leans toward X” with logged rationale.</li>
-      <li><strong>Richer tool schema</strong>—code execution, structured citations, per-claim confidence if the stack allows.</li>
-      <li><strong>Postgres + queues</strong> if rooms need concurrency beyond SQLite’s comfort zone.</li>
-      <li><strong>Evaluation harness</strong>—automatic runs on fixed question sets to regress model mix and prompt quality.</li>
-    </ul>
+    <div class="slide__main">
+      <p class="kicker">Roadmap (honest)</p>
+      <h1>What would make this production-grad</h1>
+      <ul>
+        <li><strong>Voting / resolution objects</strong>—explicit “the room leans toward X” with logged rationale.</li>
+        <li><strong>Richer tool schema</strong>—code execution, structured citations, per-claim confidence if the stack allows.</li>
+        <li><strong>Postgres + queues</strong> if rooms need concurrency beyond SQLite’s comfort zone.</li>
+        <li><strong>Evaluation harness</strong>—automatic runs on fixed question sets to regress model mix and prompt quality.</li>
+      </ul>
+    </div>
     <div class="footnote"><span></span><span>14 / 16</span></div>
   </section>
 
   <!-- 15 -->
   <section class="slide">
-    <p class="kicker">Demo script</p>
-    <h1>60 seconds that land</h1>
-    <ol style="margin-top:0.75rem;padding-left:1.25rem;font-size:0.95rem;line-height:1.55;color:#3f3f46">
-      <li style="margin-bottom:0.5rem">Open Majlis → show <strong>marketing page</strong> vs instant login wall.</li>
-      <li style="margin-bottom:0.5rem">Create a room → Curator recommendations → <strong>select panel + capabilities</strong>.</li>
-      <li style="margin-bottom:0.5rem">Fire a question → <strong>parallel streams</strong> → stacked cards.</li>
-      <li style="margin-bottom:0.5rem">Trigger a <strong>Curator move</strong> → watch inter-model discuss; toggle <strong>web round</strong> once.</li>
-      <li style="margin-bottom:0.5rem"><strong>Kick</strong> someone with multi-reason feedback → next round ignores them in context.</li>
-    </ol>
+    <div class="slide__main">
+      <p class="kicker">Demo script</p>
+      <h1>60 seconds that land</h1>
+      <ol class="demo-list" style="margin-top:0.75rem;padding-left:1.25rem;color:#3f3f46">
+        <li>Open Majlis → show <strong>marketing page</strong> vs instant login wall.</li>
+        <li>Create a room → Curator recommendations → <strong>select panel + capabilities</strong>.</li>
+        <li>Fire a question → <strong>parallel streams</strong> → stacked cards.</li>
+        <li>Trigger a <strong>Curator move</strong> → watch inter-model discuss; toggle <strong>web round</strong> once.</li>
+        <li><strong>Kick</strong> someone with multi-reason feedback → next round ignores them in context.</li>
+      </ol>
+    </div>
     <div class="footnote"><span></span><span>15 / 16</span></div>
   </section>
 
   <!-- 16 -->
   <section class="slide slide--hero">
-    <p class="kicker">Close</p>
-    <h1>Majlis = deliberation as a product primitive</h1>
-    <p class="lead" style="max-width:none">Multi-LLM is not “more text.” It’s <strong>governance</strong>: who speaks, who stays, what the room is asked to do next. We built the smallest stack that proves that thesis on real hardware.</p>
-    <p class="muted" style="margin-top:1.25rem">majlis.mohessaid.com · api.mohessaid.com · repo + docker-compose for full repro.</p>
+    <div class="slide__main">
+      <p class="kicker">Close</p>
+      <h1>Majlis = deliberation as a product primitive</h1>
+      <p class="lead" style="max-width:none">Multi-LLM is not “more text.” It’s <strong>governance</strong>: who speaks, who stays, what the room is asked to do next. We built the smallest stack that proves that thesis on real hardware.</p>
+      <p class="muted" style="margin-top:1.25rem">majlis.mohessaid.com · api.mohessaid.com · repo + docker-compose for full repro.</p>
+    </div>
     <div class="footnote"><span>Thank you</span><span>16 / 16</span></div>
   </section>
 
