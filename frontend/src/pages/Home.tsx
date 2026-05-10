@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom"
-import { useAuth, SignInButton } from "@clerk/clerk-react"
+import { useAuth, SignInButton, UserButton } from "@clerk/clerk-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
@@ -47,6 +47,9 @@ export function Home() {
               <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
               4 models live
             </Badge>
+            {isSignedIn && (
+              <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: "h-8 w-8" } }} />
+            )}
             <CTA label={isSignedIn ? "Open App →" : "Sign in"} />
           </div>
         </div>

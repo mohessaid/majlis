@@ -1,6 +1,6 @@
 import { useState, useEffect, type FormEvent } from "react"
 import { useNavigate } from "react-router-dom"
-import { useAuth } from "@clerk/clerk-react"
+import { useAuth, UserButton } from "@clerk/clerk-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
@@ -95,9 +95,12 @@ export function Landing() {
           <button onClick={() => navigate("/")} className="font-semibold hover:opacity-60 transition-opacity text-sm">
             Majlis
           </button>
-          <Badge variant="outline" className="gap-1.5 text-xs">
-            <span className="h-1.5 w-1.5 rounded-full bg-green-500" />4 models online
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="gap-1.5 text-xs">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-500" />4 models online
+            </Badge>
+            <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: "h-8 w-8" } }} />
+          </div>
         </header>
 
         <div className="flex flex-1 flex-col">
@@ -210,9 +213,12 @@ export function Landing() {
           </svg>
           Back
         </button>
-        <Badge variant="outline" className="gap-1.5 text-xs">
-          <span className="h-1.5 w-1.5 rounded-full bg-green-500" />4 models online
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="gap-1.5 text-xs">
+            <span className="h-1.5 w-1.5 rounded-full bg-green-500" />4 models online
+          </Badge>
+          <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: "h-8 w-8" } }} />
+        </div>
       </header>
 
       <div className="mx-auto w-full max-w-2xl px-4 py-8 space-y-5">

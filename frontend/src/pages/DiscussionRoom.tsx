@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useParams, useNavigate } from "react-router-dom"
-import { useAuth } from "@clerk/clerk-react"
+import { useAuth, UserButton } from "@clerk/clerk-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
@@ -323,14 +323,15 @@ export function DiscussionRoom() {
       {/* ── Sidebar ── */}
       <aside className="flex w-52 shrink-0 flex-col border-r bg-muted/20">
 
-        <div className="flex items-center gap-2 border-b px-4 h-14">
+        <div className="flex items-center justify-between gap-2 border-b px-2 h-14">
           <button onClick={() => navigate("/app")}
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
-            All Rooms
+            <span className="truncate">Rooms</span>
           </button>
+          <UserButton afterSignOutUrl="/" appearance={{ elements: { avatarBox: "h-8 w-8" } }} />
         </div>
 
         <div className="border-b px-4 py-3">
