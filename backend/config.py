@@ -27,13 +27,13 @@ FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
 # Database
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./majlis.db")
 
-# Model IDs (as served by vLLM)
+# Model IDs — must match --served-model-name in docker-compose vLLM commands
 MODEL_IDS = {
-    "llama-3.1-8b": "meta-llama/Llama-3.1-8B-Instruct",
-    "qwen2.5-7b": "Qwen/Qwen2.5-7B-Instruct",
-    "mistral-7b": "mistralai/Mistral-7B-Instruct-v0.3",
-    "deepseek-r1-8b": "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
-    "curator": "Qwen/Qwen2.5-0.5B-Instruct",
+    "llama-3.1-8b": "llama-3.1-8b",
+    "qwen2.5-7b": "qwen2.5-7b",
+    "mistral-7b": "mistral-7b",
+    "deepseek-r1-8b": "deepseek-r1-8b",
+    "curator": "curator",
 }
 
 MODEL_DISPLAY_NAMES = {
