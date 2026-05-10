@@ -48,7 +48,7 @@ export default function App() {
     );
   }
   return (
-    <ClerkProvider publishableKey={CLERK_KEY} fallbackRedirectUrl="/app">
+    <ClerkProvider publishableKey={CLERK_KEY} signInFallbackRedirectUrl="/app" signUpFallbackRedirectUrl="/app">
       <AppRoutes />
     </ClerkProvider>
   );

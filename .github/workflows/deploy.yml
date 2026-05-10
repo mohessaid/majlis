@@ -114,6 +114,7 @@ jobs:
     name: Deploy → AMD Droplet
     needs: backend-image
     runs-on: ubuntu-latest
+    continue-on-error: true   # SSH from GH runners may be blocked by firewall; deploy manually if this fails
     environment: production
     steps:
       - uses: actions/checkout@v4
@@ -169,14 +170,13 @@ jobs:
     steps:
       - name: Report status
         run: |
-          if [[ "${{ needs.deploy-frontend.result }}" == "success" && \
-                "${{ needs.deploy-backend.result }}" == "success" ]]; then
-            echo "✅ Majlis deployed successfully!"
-            echo "  Frontend: https://majlis.pages.dev"
-            echo "  Backend: https://${{ secrets.DROPLET_IP }}/health"
+          FRONTEND="${{ needs.deploy-frontend.result }}"
+          BACKEND="${{ needs.deploy-backend.result }}"
+          echo "  Frontend: $FRONTEND"
+          echo "  Backend:  $BACKEND (SSH from GH runners may be blocked — deploy manually if needed)"
+          if [[ "$FRONTEND" == "success" ]]; then
+            echo "✅ Frontend deployed to https://majlis.mohessaid.com"
           else
-            echo "❌ Deploy failed"
-            echo "  Frontend: ${{ needs.deploy-frontend.result }}"
-            echo "  Backend:  ${{ needs.deploy-backend.result }}"
+            echo "❌ Frontend deploy failed"
             exit 1
           fi
