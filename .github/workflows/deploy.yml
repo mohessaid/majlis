@@ -73,6 +73,9 @@ jobs:
   backend-image:
     name: Build Backend Image
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     outputs:
       image_tag: ${{ steps.meta.outputs.version }}
     steps:

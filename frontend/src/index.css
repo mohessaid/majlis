@@ -1,41 +1,87 @@
 @import "tailwindcss";
 
-@theme {
-  --color-background: #0a0a0a;
-  --color-surface: #111111;
-  --color-surface-2: #1a1a1a;
-  --color-border: #262626;
-  --color-border-subtle: #1c1c1c;
-  --color-text: #fafafa;
-  --color-text-muted: #a1a1aa;
-  --color-text-dim: #52525b;
-  --color-accent: #6366f1;
-  --color-accent-hover: #818cf8;
-  --color-success: #22c55e;
-  --color-warning: #f59e0b;
-  --color-danger: #ef4444;
+/* Open Colors — light theme variables */
+:root {
+  /* Open Colors Gray */
+  --oc-gray-0: #f8f9fa;
+  --oc-gray-1: #f1f3f5;
+  --oc-gray-2: #e9ecef;
+  --oc-gray-3: #dee2e6;
+  --oc-gray-4: #ced4da;
+  --oc-gray-5: #adb5bd;
+  --oc-gray-6: #868e96;
+  --oc-gray-7: #495057;
+  --oc-gray-8: #343a40;
+  --oc-gray-9: #212529;
 
-  --color-llama: #4ade80;
-  --color-qwen: #60a5fa;
-  --color-mistral: #f472b6;
-  --color-deepseek: #fb923c;
-  --color-curator: #a78bfa;
+  /* Open Colors Indigo */
+  --oc-indigo-0: #edf2ff;
+  --oc-indigo-1: #dbe4ff;
+  --oc-indigo-2: #bac8ff;
+  --oc-indigo-3: #91a7ff;
+  --oc-indigo-4: #748ffc;
+  --oc-indigo-5: #5c7cfa;
+  --oc-indigo-6: #4c6ef5;
+  --oc-indigo-7: #4263eb;
+  --oc-indigo-8: #3b5bdb;
+  --oc-indigo-9: #364fc7;
+
+  /* Open Colors Violet */
+  --oc-violet-0: #f3f0ff;
+  --oc-violet-5: #845ef7;
+  --oc-violet-6: #7950f2;
+
+  /* Open Colors Teal */
+  --oc-teal-6: #0ca678;
+  --oc-teal-7: #099268;
+
+  /* Open Colors Blue */
+  --oc-blue-5: #339af0;
+  --oc-blue-6: #228be6;
+
+  /* Open Colors Pink */
+  --oc-pink-5: #f06595;
+  --oc-pink-6: #e64980;
+
+  /* Open Colors Orange */
+  --oc-orange-5: #ff922b;
+  --oc-orange-6: #fd7e14;
+
+  /* Open Colors Green */
+  --oc-green-6: #2f9e44;
+
+  /* Semantic tokens */
+  --bg: #ffffff;
+  --bg-subtle: var(--oc-gray-0);
+  --bg-muted: var(--oc-gray-1);
+  --surface: #ffffff;
+  --border: var(--oc-gray-2);
+  --border-subtle: var(--oc-gray-1);
+  --text: var(--oc-gray-9);
+  --text-muted: var(--oc-gray-6);
+  --text-dim: var(--oc-gray-4);
+  --accent: var(--oc-indigo-6);
+  --accent-bg: var(--oc-indigo-0);
+  --accent-hover: var(--oc-indigo-7);
+
+  /* Model colors */
+  --color-llama: var(--oc-teal-6);
+  --color-qwen: var(--oc-blue-6);
+  --color-mistral: var(--oc-pink-6);
+  --color-deepseek: var(--oc-orange-6);
+  --color-curator: var(--oc-violet-6);
 }
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body, #root {
   height: 100%;
-  background: var(--color-background);
-  color: var(--color-text);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }

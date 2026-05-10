@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
 import { createRoom, addParticipant, type CreateRoomResponse, type Recommendation } from "../lib/api";
-import { Button, Card, Textarea, Spinner, Toggle, ScoreBar, ModelDot, modelColor, cn } from "../components/ui";
+import { Button, Card, Textarea, Spinner, Toggle, ScoreBar, ModelDot, modelColor, modelBg, cn } from "../components/ui";
 
 interface SelectedModel {
   model_id: string;
@@ -13,10 +13,10 @@ interface SelectedModel {
 }
 
 const MODEL_SHORT: Record<string, string> = {
-  "llama-3.1-8b": "Llama",
-  "qwen2.5-7b": "Qwen",
-  "mistral-7b": "Mistral",
-  "deepseek-r1-8b": "DeepSeek",
+  "llama-3.1-8b": "Llama 3.1",
+  "qwen2.5-7b": "Qwen 2.5",
+  "mistral-7b": "Mistral 7B",
+  "deepseek-r1-8b": "DeepSeek R1",
 };
 
 function recToSelected(r: Recommendation): SelectedModel {
@@ -91,52 +91,47 @@ export function Landing() {
 
   if (step === "input") {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4">
-        <div className="w-full max-w-2xl space-y-8">
+      <div className="min-h-screen flex flex-col items-center justify-center px-4 bg-[#f8f9fa]">
+        <div className="w-full max-w-xl space-y-8">
           {/* Brand */}
-          <div className="space-y-2 text-center">
-            <div className="flex items-center justify-center gap-3 mb-1">
-              <span className="h-2 w-2 rounded-full bg-indigo-400" />
-              <span className="text-xs font-medium tracking-widest text-[#52525b] uppercase">Majlis</span>
-              <span className="h-2 w-2 rounded-full bg-indigo-400" />
+          <div className="space-y-3 text-center">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#dee2e6] bg-white px-4 py-1.5 text-xs font-medium text-[#868e96]">
+              <span className="h-1.5 w-1.5 rounded-full bg-[#4c6ef5]" />
+              Majlis · Multi-AI Discussion Arena
             </div>
-            <h1 className="text-3xl font-semibold text-[#fafafa] tracking-tight">
+            <h1 className="text-4xl font-bold text-[#212529] tracking-tight">
               Multiple AI minds.<br />One table.
             </h1>
-            <p className="text-sm text-[#52525b] max-w-md mx-auto">
-              Ask a question. The Curator selects the best models. They respond, debate, and earn their seat.
+            <p className="text-[#868e96] max-w-sm mx-auto text-sm leading-relaxed">
+              Ask a question. The Curator selects the best models for your topic. They respond, debate, and earn their seat.
             </p>
           </div>
 
-          {/* Input */}
-          <form onSubmit={handleAnalyze} className="space-y-3">
-            <Textarea
-              placeholder="What do you want to discuss? E.g. 'Best approach to build a production-grade RAG system'"
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              rows={4}
-              disabled={false}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAnalyze(e as unknown as FormEvent); }
-              }}
-            />
-            <Button
-              type="submit"
-              size="lg"
-              className="w-full"
-              disabled={!question.trim()}
-            >
-              Analyze & Select Models →
-            </Button>
-            {error && <p className="text-xs text-red-400 text-center">{error}</p>}
-          </form>
+          {/* Input card */}
+          <Card className="p-6 shadow-sm">
+            <form onSubmit={handleAnalyze} className="space-y-4">
+              <Textarea
+                placeholder="What do you want to discuss? e.g. &ldquo;Best approach to build a production-grade RAG system&rdquo;"
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                rows={4}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAnalyze(e as unknown as FormEvent); }
+                }}
+              />
+              <Button type="submit" size="lg" className="w-full" disabled={!question.trim()}>
+                Analyze & Select Models →
+              </Button>
+              {error && <p className="text-xs text-[#e03131] text-center">{error}</p>}
+            </form>
+          </Card>
 
-          {/* Features */}
-          <div className="flex items-center justify-center gap-8 text-xs text-[#52525b]">
+          {/* Feature hints */}
+          <div className="flex items-center justify-center gap-6 text-xs text-[#adb5bd]">
             <span>5 specialized models</span>
-            <span className="h-3 w-px bg-[#262626]" />
-            <span>Reputation-weighted</span>
-            <span className="h-3 w-px bg-[#262626]" />
+            <span className="h-3 w-px bg-[#dee2e6]" />
+            <span>Curator-weighted selection</span>
+            <span className="h-3 w-px bg-[#dee2e6]" />
             <span>Real-time streaming</span>
           </div>
         </div>
@@ -144,55 +139,54 @@ export function Landing() {
     );
   }
 
-  // Setup step — shown while loading or after room is created
   return (
-    <div className="min-h-screen flex flex-col items-center justify-start px-4 py-12">
-      <div className="w-full max-w-2xl space-y-6">
+    <div className="min-h-screen bg-[#f8f9fa] flex flex-col items-center px-4 py-10">
+      <div className="w-full max-w-xl space-y-5">
 
-        {/* Question header */}
+        {/* Back + question */}
         <div>
           <button
             onClick={() => { setStep("input"); setRoom(null); setSelected([]); }}
-            className="text-xs text-[#52525b] hover:text-[#a1a1aa] mb-3 flex items-center gap-1 transition-colors"
+            className="text-xs text-[#adb5bd] hover:text-[#868e96] mb-3 flex items-center gap-1 transition-colors"
           >
             ← Back
           </button>
-          <p className="text-xs text-[#52525b] uppercase tracking-widest mb-1">Your Question</p>
-          <p className="text-[#fafafa] font-medium">"{question}"</p>
+          <Card className="p-4">
+            <p className="text-[10px] uppercase tracking-widest text-[#adb5bd] mb-1 font-medium">Your Question</p>
+            <p className="text-sm font-medium text-[#343a40]">"{question}"</p>
+          </Card>
         </div>
 
         {!room ? (
-          // Loading state
-          <div className="space-y-4">
-            <div className="flex items-center gap-3 text-sm text-[#a1a1aa]">
-              <Spinner className="h-4 w-4 text-indigo-400" />
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm text-[#868e96] px-1">
+              <Spinner className="h-4 w-4 text-[#4c6ef5]" />
               <span>Curator is analyzing your question…</span>
             </div>
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="h-24 rounded-xl bg-[#111] border border-[#1c1c1c] animate-pulse" />
-              ))}
-            </div>
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-20 rounded-xl bg-white border border-[#e9ecef] animate-pulse" />
+            ))}
           </div>
         ) : (
           <>
             {/* Curator note */}
             {room.curator_notes && (
-              <div className="flex gap-3 rounded-xl border border-[#2d2060] bg-[#1a1535] p-4">
-                <span className="mt-0.5 h-2 w-2 flex-shrink-0 rounded-full bg-[#a78bfa]" />
+              <div className="flex gap-3 rounded-xl border border-[#e5dbff] bg-[#f3f0ff] p-4">
+                <ModelDot modelId="curator" size={8} />
                 <div>
-                  <p className="text-xs font-medium text-[#a78bfa] mb-1">Curator</p>
-                  <p className="text-sm text-[#c4b5fd]">{room.curator_notes}</p>
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-[#7950f2] mb-1">Curator Analysis</p>
+                  <p className="text-sm text-[#5f3dc4]">{room.curator_notes}</p>
                 </div>
               </div>
             )}
 
+            {/* Models */}
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-medium text-[#a1a1aa] uppercase tracking-widest">
-                  Recommended Models <span className="text-[#52525b]">— click to toggle</span>
+              <div className="flex items-center justify-between mb-2 px-1">
+                <p className="text-xs font-semibold uppercase tracking-widest text-[#adb5bd]">
+                  Recommended Models
                 </p>
-                <span className="text-xs text-[#52525b]">{selected.length} selected</span>
+                <span className="text-xs text-[#adb5bd]">{selected.length} selected</span>
               </div>
 
               <div className="space-y-2">
@@ -200,97 +194,88 @@ export function Landing() {
                   const isSelected = !!selected.find((s) => s.model_id === rec.model_id);
                   const sel = selected.find((s) => s.model_id === rec.model_id);
                   const color = modelColor(rec.model_id);
+                  const bg = modelBg(rec.model_id);
                   return (
                     <Card
                       key={rec.model_id}
                       className={cn(
-                        "p-4 cursor-pointer transition-all",
-                        isSelected ? "border-[#262626] bg-[#111]" : "border-[#1c1c1c] bg-[#0d0d0d] opacity-60"
+                        "p-4 cursor-pointer transition-all select-none",
+                        isSelected
+                          ? "border-[#dee2e6] shadow-sm"
+                          : "border-[#e9ecef] opacity-60 hover:opacity-80"
                       )}
                       onClick={() => toggleModel(rec)}
                     >
                       <div className="flex items-start gap-3">
-                        {/* Color indicator + checkbox */}
-                        <div className="mt-0.5 flex-shrink-0">
-                          <div
-                            className={cn(
-                              "h-4 w-4 rounded-full border-2 flex items-center justify-center transition-colors",
-                              isSelected ? "border-current" : "border-[#262626]"
-                            )}
-                            style={{ borderColor: isSelected ? color : undefined }}
-                          >
-                            {isSelected && <div className="h-2 w-2 rounded-full" style={{ background: color }} />}
-                          </div>
+                        {/* Avatar */}
+                        <div
+                          className="flex-shrink-0 h-8 w-8 rounded-lg flex items-center justify-center text-xs font-bold"
+                          style={{ background: bg, color }}
+                        >
+                          {(MODEL_SHORT[rec.model_id] ?? rec.display_name).charAt(0)}
                         </div>
 
-                        <div className="flex-1 min-w-0 space-y-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium" style={{ color }}>
-                                {MODEL_SHORT[rec.model_id] ?? rec.display_name}
-                              </span>
-                              <span className="text-xs text-[#52525b]">{rec.display_name}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2 mb-0.5">
+                            <span className="text-sm font-semibold text-[#343a40]">
+                              {MODEL_SHORT[rec.model_id] ?? rec.display_name}
+                            </span>
+                            <div className="w-24 flex-shrink-0">
+                              <ScoreBar score={rec.reputation_score} />
                             </div>
-                            <ScoreBar score={rec.reputation_score} />
                           </div>
-                          <p className="text-xs text-[#a1a1aa]">{rec.reason}</p>
+                          <p className="text-xs text-[#868e96] mb-2">{rec.reason}</p>
 
-                          {/* Capability toggles — only when selected */}
                           {isSelected && sel && (
-                            <div
-                              className="flex gap-2 pt-1"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Toggle
-                                checked={sel.capabilities.web_search}
-                                onChange={(v) => updateCap(rec.model_id, "web_search", v)}
-                                label="Search"
-                              />
-                              <Toggle
-                                checked={sel.capabilities.thinking}
-                                onChange={(v) => updateCap(rec.model_id, "thinking", v)}
-                                label="Thinking"
-                              />
-                              <Toggle
-                                checked={sel.capabilities.fast_mode}
-                                onChange={(v) => updateCap(rec.model_id, "fast_mode", v)}
-                                label="Fast"
-                              />
+                            <div className="flex gap-1.5 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                              <Toggle checked={sel.capabilities.web_search} onChange={(v) => updateCap(rec.model_id, "web_search", v)} label="Web Search" />
+                              <Toggle checked={sel.capabilities.thinking} onChange={(v) => updateCap(rec.model_id, "thinking", v)} label="Thinking" />
+                              <Toggle checked={sel.capabilities.fast_mode} onChange={(v) => updateCap(rec.model_id, "fast_mode", v)} label="Fast" />
                             </div>
                           )}
+                        </div>
+
+                        {/* Checkbox */}
+                        <div
+                          className={cn(
+                            "flex-shrink-0 h-5 w-5 rounded-full border-2 flex items-center justify-center transition-all",
+                            isSelected ? "border-[#4c6ef5]" : "border-[#dee2e6]"
+                          )}
+                        >
+                          {isSelected && <div className="h-2.5 w-2.5 rounded-full bg-[#4c6ef5]" />}
                         </div>
                       </div>
                     </Card>
                   );
                 })}
 
-                {/* Additional models (not recommended) */}
-                {unselectedModels.map((m) => (
-                  <Card
-                    key={m.model_id}
-                    className="p-4 cursor-pointer transition-all border-[#1c1c1c] bg-[#0d0d0d] opacity-50 hover:opacity-70"
-                    onClick={() => {
-                      const rec: Recommendation = {
-                        model_id: m.model_id,
-                        display_name: m.display_name,
-                        reputation_score: m.score,
-                        reason: "Added manually",
-                        suggested_capabilities: { web_search: false, thinking: false, fast_mode: false },
-                      };
-                      toggleModel(rec);
-                    }}
-                  >
-                    <div className="flex items-center gap-3">
-                      <ModelDot modelId={m.model_id} size={10} />
-                      <span className="text-sm text-[#a1a1aa]">{m.display_name}</span>
-                      <span className="ml-auto text-xs text-[#52525b]">+ Add</span>
-                    </div>
-                  </Card>
-                ))}
+                {/* Additional models */}
+                {unselectedModels.map((m) => {
+                  const rec: Recommendation = {
+                    model_id: m.model_id,
+                    display_name: m.display_name,
+                    reputation_score: m.score,
+                    reason: "Add manually",
+                    suggested_capabilities: { web_search: false, thinking: false, fast_mode: false },
+                  };
+                  return (
+                    <Card
+                      key={m.model_id}
+                      className="p-3 cursor-pointer border-[#e9ecef] opacity-50 hover:opacity-70 transition-opacity"
+                      onClick={() => toggleModel(rec)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <ModelDot modelId={m.model_id} size={8} />
+                        <span className="text-sm text-[#868e96]">{m.display_name}</span>
+                        <span className="ml-auto text-xs text-[#adb5bd]">+ Add</span>
+                      </div>
+                    </Card>
+                  );
+                })}
               </div>
             </div>
 
-            {error && <p className="text-xs text-red-400">{error}</p>}
+            {error && <p className="text-xs text-[#e03131] px-1">{error}</p>}
 
             <Button
               size="lg"

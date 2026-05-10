@@ -10,15 +10,15 @@ export function cn(...inputs: ClassValue[]) {
 
 // ── Button ──────────────────────────────────────────────────────────────────
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none disabled:pointer-events-none disabled:opacity-40 cursor-pointer",
+  "inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4c6ef5] focus-visible:ring-offset-1 disabled:pointer-events-none disabled:opacity-40 cursor-pointer",
   {
     variants: {
       variant: {
-        default: "bg-indigo-500 text-white hover:bg-indigo-400",
-        secondary: "bg-[#1a1a1a] text-[#fafafa] border border-[#262626] hover:bg-[#222]",
-        ghost: "text-[#a1a1aa] hover:text-[#fafafa] hover:bg-[#1a1a1a]",
-        danger: "text-[#ef4444] hover:text-[#fafafa] hover:bg-[#ef444420]",
-        outline: "border border-[#262626] text-[#fafafa] hover:bg-[#1a1a1a]",
+        default: "bg-[#4c6ef5] text-white hover:bg-[#4263eb]",
+        secondary: "bg-white text-[#343a40] border border-[#dee2e6] hover:bg-[#f8f9fa] hover:border-[#ced4da]",
+        ghost: "text-[#868e96] hover:text-[#495057] hover:bg-[#f1f3f5]",
+        danger: "text-[#e03131] hover:text-white hover:bg-[#e03131]",
+        outline: "border border-[#dee2e6] text-[#343a40] hover:bg-[#f8f9fa]",
       },
       size: {
         default: "h-9 px-4 py-2",
@@ -45,19 +45,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 );
 Button.displayName = "Button";
 
-// ── Badge ───────────────────────────────────────────────────────────────────
-export function Badge({ className, children }: { className?: string; children: React.ReactNode }) {
-  return (
-    <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", className)}>
-      {children}
-    </span>
-  );
-}
-
 // ── Card ────────────────────────────────────────────────────────────────────
 export function Card({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn("rounded-xl border border-[#262626] bg-[#111111]", className)} {...props}>
+    <div className={cn("rounded-xl border border-[#e9ecef] bg-white", className)} {...props}>
       {children}
     </div>
   );
@@ -69,7 +60,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTML
     <textarea
       ref={ref}
       className={cn(
-        "w-full resize-none rounded-xl border border-[#262626] bg-[#111] px-4 py-3 text-sm text-[#fafafa] placeholder:text-[#52525b] focus:border-[#6366f1] focus:outline-none transition-colors",
+        "w-full resize-none rounded-xl border border-[#dee2e6] bg-white px-4 py-3 text-sm text-[#212529] placeholder:text-[#ced4da] focus:border-[#4c6ef5] focus:outline-none focus:ring-2 focus:ring-[#4c6ef5]/20 transition-all",
         className
       )}
       {...props}
@@ -96,12 +87,12 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
       className={cn(
         "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors border",
         checked
-          ? "border-indigo-500/40 bg-indigo-500/10 text-indigo-400"
-          : "border-[#262626] bg-transparent text-[#52525b] hover:text-[#a1a1aa]"
+          ? "border-[#bac8ff] bg-[#edf2ff] text-[#4263eb]"
+          : "border-[#dee2e6] bg-white text-[#adb5bd] hover:text-[#868e96] hover:border-[#ced4da]"
       )}
       type="button"
     >
-      <span className={cn("h-1.5 w-1.5 rounded-full", checked ? "bg-indigo-400" : "bg-[#52525b]")} />
+      <span className={cn("h-1.5 w-1.5 rounded-full", checked ? "bg-[#4263eb]" : "bg-[#ced4da]")} />
       {label}
     </button>
   );
@@ -110,27 +101,38 @@ export function Toggle({ checked, onChange, label }: { checked: boolean; onChang
 // ── ScoreBar ─────────────────────────────────────────────────────────────────
 export function ScoreBar({ score }: { score: number }) {
   const pct = Math.round(score * 100);
-  const color = score >= 0.7 ? "#22c55e" : score >= 0.5 ? "#f59e0b" : "#ef4444";
+  const color = score >= 0.7 ? "#2f9e44" : score >= 0.5 ? "#e67700" : "#e03131";
+  const trackColor = score >= 0.7 ? "#d3f9d8" : score >= 0.5 ? "#fff3bf" : "#ffe3e3";
   return (
     <div className="flex items-center gap-2">
-      <div className="h-1 flex-1 rounded-full bg-[#262626] overflow-hidden">
+      <div className="h-1.5 flex-1 rounded-full overflow-hidden" style={{ background: trackColor }}>
         <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: color }} />
       </div>
-      <span className="text-xs tabular-nums" style={{ color }}>{pct}%</span>
+      <span className="text-xs font-medium tabular-nums" style={{ color }}>{pct}%</span>
     </div>
   );
 }
 
-// ── ModelDot ──────────────────────────────────────────────────────────────────
+// ── ModelDot + colors ─────────────────────────────────────────────────────────
 const MODEL_COLORS: Record<string, string> = {
-  "llama-3.1-8b": "#4ade80",
-  "qwen2.5-7b": "#60a5fa",
-  "mistral-7b": "#f472b6",
-  "deepseek-r1-8b": "#fb923c",
-  curator: "#a78bfa",
+  "llama-3.1-8b": "#0ca678",
+  "qwen2.5-7b": "#228be6",
+  "mistral-7b": "#e64980",
+  "deepseek-r1-8b": "#fd7e14",
+  curator: "#7950f2",
 };
 export function modelColor(modelId: string) {
-  return MODEL_COLORS[modelId] ?? "#a1a1aa";
+  return MODEL_COLORS[modelId] ?? "#adb5bd";
+}
+export function modelBg(modelId: string) {
+  const bgMap: Record<string, string> = {
+    "llama-3.1-8b": "#e6fcf5",
+    "qwen2.5-7b": "#e7f5ff",
+    "mistral-7b": "#fff0f6",
+    "deepseek-r1-8b": "#fff4e6",
+    curator: "#f3f0ff",
+  };
+  return bgMap[modelId] ?? "#f8f9fa";
 }
 export function ModelDot({ modelId, size = 8 }: { modelId: string; size?: number }) {
   return <span className="rounded-full inline-block flex-shrink-0" style={{ width: size, height: size, background: modelColor(modelId) }} />;
