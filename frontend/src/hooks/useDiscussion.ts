@@ -1,24 +1,56 @@
-import { useState, useRef, useCallback } from "react";
-import { streamDiscussion, type DiscussionChunk } from "../lib/api";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { streamDiscussion, getMessages, type DiscussionChunk, type HistoryMessage } from "../lib/api";
 
 export interface MessageBubble {
   id: string;
   participant_id: string;
   model_id: string;
   display_name: string;
-  layer: "user" | "surface" | "depth" | "thinking" | "curator";
+  layer: "user" | "surface" | "depth" | "thinking" | "curator" | "discuss";
   content: string;
   streaming: boolean;
   searched: boolean;
   isCurator: boolean;
 }
 
+function historyToMessage(h: HistoryMessage): MessageBubble {
+  return {
+    id: h.id,
+    participant_id: h.participant_id,
+    model_id: h.model_id ?? (h.layer === "user" ? "user" : "unknown"),
+    display_name: h.display_name,
+    layer: h.layer as MessageBubble["layer"],
+    content: h.content,
+    streaming: false,
+    searched: h.searched,
+    isCurator: h.layer === "curator",
+  };
+}
+
 export function useDiscussion(roomId: string, token: string | null | undefined) {
   const [messages, setMessages] = useState<MessageBubble[]>([]);
   const [streaming, setStreaming] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
   const cancelRef = useRef<(() => void) | null>(null);
 
-  const appendChunk = useCallback((participantId: string, modelId: string, layer: string, chunk: string, displayNames: Record<string, string>) => {
+  // Load history once token is available
+  useEffect(() => {
+    if (!token || !roomId || historyLoaded) return;
+    getMessages(roomId, token)
+      .then((hist) => {
+        setMessages(hist.map(historyToMessage));
+        setHistoryLoaded(true);
+      })
+      .catch(() => setHistoryLoaded(true)); // silently fail, start fresh
+  }, [token, roomId, historyLoaded]);
+
+  const appendChunk = useCallback((
+    participantId: string,
+    modelId: string,
+    layer: string,
+    chunk: string,
+    displayNames: Record<string, string>
+  ) => {
     setMessages((prev) => {
       const existing = [...prev];
       const lastIdx = existing.findLastIndex(
@@ -46,20 +78,19 @@ export function useDiscussion(roomId: string, token: string | null | undefined) 
   }, []);
 
   const finalizeMessage = useCallback((participantId: string, layer: string, searched: boolean) => {
-    setMessages((prev) => {
-      return prev.map((m) =>
+    setMessages((prev) =>
+      prev.map((m) =>
         m.participant_id === participantId && m.layer === layer && m.streaming
           ? { ...m, streaming: false, searched }
           : m
-      );
-    });
+      )
+    );
   }, []);
 
   const send = useCallback(
     (message: string, displayNames: Record<string, string>, targetParticipantId?: string) => {
       if (streaming) return;
 
-      // Add user message locally
       setMessages((prev) => [
         ...prev,
         {
@@ -103,5 +134,19 @@ export function useDiscussion(roomId: string, token: string | null | undefined) 
     [send]
   );
 
-  return { messages, streaming, send, requestDepth };
+  // Request models to discuss among themselves, given the last turn's responses as context
+  const requestDiscussion = useCallback(
+    (lastResponses: MessageBubble[], displayNames: Record<string, string>) => {
+      if (streaming || lastResponses.length === 0) return;
+      const context = lastResponses
+        .filter((m) => m.layer !== "user" && m.layer !== "curator")
+        .map((m) => `${m.display_name}: "${m.content.slice(0, 300)}${m.content.length > 300 ? "…" : ""}"`)
+        .join("\n\n");
+      const message = `[Discussion Round]\n\nPrevious responses:\n${context}\n\nNow respond to what the others said. Agree with specifics, challenge a point, or add something they missed. 2-3 sentences only.`;
+      send(message, displayNames);
+    },
+    [send, streaming]
+  );
+
+  return { messages, streaming, historyLoaded, send, requestDepth, requestDiscussion };
 }

@@ -29,6 +29,13 @@ DEPTH_SYSTEM = (
 )
 
 
+
+DISCUSS_SYSTEM = (
+    "You are {display_name} in a group discussion. The other models have shared their views. "
+    "Respond directly to what they said — agree with specifics, challenge a point, or add something they missed. "
+    "2-3 sentences max. No preamble."
+)
+
 class DiscussRequest(BaseModel):
     room_id: str
     message: str
@@ -46,7 +53,7 @@ async def _stream_participant(
     caps = json.loads(participant.capabilities or "{}")
     display_name = participant.display_name
 
-    system_template = DEPTH_SYSTEM if layer == "depth" else SURFACE_SYSTEM
+    system_template = DEPTH_SYSTEM if layer == "depth" else (DISCUSS_SYSTEM if layer == "discuss" else SURFACE_SYSTEM)
     system_prompt = system_template.format(display_name=display_name)
 
     # Build user message, optionally prepending search context
@@ -54,7 +61,7 @@ async def _stream_participant(
     if search_results:
         user_content = format_search_context(search_results) + "\n\n" + message
 
-    max_tokens = 200 if caps.get("fast_mode") else (600 if layer == "depth" else 300)
+    max_tokens = 150 if layer == "discuss" else (200 if caps.get("fast_mode") else (600 if layer == "depth" else 300))
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -260,14 +267,30 @@ async def get_messages(
     stmt = select(Message).where(Message.room_id == room_id).order_by(Message.created_at)
     messages = session.exec(stmt).all()
 
-    return [
-        {
+    # Build participant map for model_id/display_name lookup
+    participants_stmt = select(Participant).where(Participant.room_id == room_id)
+    p_map = {p.id: p for p in session.exec(participants_stmt).all()}
+
+    result = []
+    for m in messages:
+        p = p_map.get(m.participant_id) if m.participant_id else None
+        if m.layer == "curator":
+            model_id = "curator"
+            display_name = "Curator"
+        elif p:
+            model_id = p.model_id
+            display_name = p.display_name
+        else:
+            model_id = None
+            display_name = "You"
+        result.append({
             "id": m.id,
-            "participant_id": m.participant_id,
+            "participant_id": m.participant_id or "user",
+            "model_id": model_id,
+            "display_name": display_name,
             "layer": m.layer,
             "content": m.content,
-            "searched": m.searched,
+            "searched": m.searched or False,
             "created_at": m.created_at.isoformat(),
-        }
-        for m in messages
-    ]
+        })
+    return result

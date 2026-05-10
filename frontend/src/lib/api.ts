@@ -131,7 +131,18 @@ export async function listRooms(token?: string): Promise<RoomSummary[]> {
   return res.json();
 }
 
-export async function getMessages(roomId: string, token?: string): Promise<object[]> {
+export interface HistoryMessage {
+  id: string;
+  participant_id: string;
+  model_id: string | null;
+  display_name: string;
+  layer: "user" | "surface" | "depth" | "thinking" | "curator" | "discuss";
+  content: string;
+  searched: boolean;
+  created_at: string;
+}
+
+export async function getMessages(roomId: string, token?: string): Promise<HistoryMessage[]> {
   const res = await fetch(`${BASE}/room/${roomId}/messages`, { headers: headers(token) });
   if (!res.ok) throw new Error(await res.text());
   return res.json();

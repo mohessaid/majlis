@@ -6,14 +6,179 @@ import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import { modelTheme } from "@/lib/models"
 import { Spinner, ScoreBar, ModelAvatar, ModelTag } from "@/components/helpers"
 import { getRoom, dismissParticipant, endRoom, addParticipant, getAvailableModels, type Room, type ModelInfo } from "@/lib/api"
-import { useDiscussion } from "@/hooks/useDiscussion"
+import { useDiscussion, type MessageBubble } from "@/hooks/useDiscussion"
 
 const DISMISS_REASONS = ["Too verbose", "Off topic", "Not helpful", "Repetitive"]
 
+/* ── Turn grouping ───────────────────────────────────────────────── */
+interface Turn {
+  id: string
+  userMsg: MessageBubble
+  curatorMsgs: MessageBubble[]
+  modelMsgs: MessageBubble[]
+}
+
+function groupTurns(messages: MessageBubble[]): Turn[] {
+  const turns: Turn[] = []
+  let current: Turn | null = null
+  for (const msg of messages) {
+    if (msg.layer === "user") {
+      if (current) turns.push(current)
+      current = { id: msg.id, userMsg: msg, curatorMsgs: [], modelMsgs: [] }
+    } else if (current) {
+      if (msg.layer === "curator") current.curatorMsgs.push(msg)
+      else current.modelMsgs.push(msg)
+    }
+  }
+  if (current) turns.push(current)
+  return turns
+}
+
+/* ── Card stack for one turn's model responses ───────────────────── */
+function ResponseStack({
+  msgs,
+  streaming,
+  onDepth,
+  onKick,
+}: {
+  msgs: MessageBubble[]
+  streaming: boolean
+  onDepth: (participantId: string) => void
+  onKick: (participantId: string) => void
+}) {
+  const [idx, setIdx] = useState(0)
+  const active = msgs[Math.min(idx, msgs.length - 1)]
+  if (!active) return null
+  const t = modelTheme(active.model_id)
+  const stackCount = Math.min(msgs.length - idx - 1, 2)
+
+  return (
+    <div className="space-y-3">
+      {/* Stack visual */}
+      <div className="relative" style={{ paddingBottom: stackCount * 5 }}>
+        {/* Shadow cards behind */}
+        {Array.from({ length: stackCount }).map((_, i) => (
+          <div
+            key={i}
+            className="absolute inset-0 rounded-xl border bg-card"
+            style={{
+              transform: `translateY(${(i + 1) * 5}px) translateX(${(i + 1) * 3}px) scale(${1 - (i + 1) * 0.015})`,
+              zIndex: -(i + 1),
+              opacity: 1 - (i + 1) * 0.25,
+            }}
+          />
+        ))}
+
+        {/* Active card */}
+        <div className="relative z-10 rounded-xl border bg-card shadow-sm transition-all">
+          <div className="flex items-start gap-3 p-4">
+            <ModelAvatar modelId={active.model_id} size="sm" />
+            <div className="min-w-0 flex-1">
+              <div className="mb-2 flex items-center gap-2 flex-wrap">
+                <ModelTag modelId={active.model_id} />
+                {active.layer === "depth" && <Badge variant="secondary" className="text-[10px]">Deep dive</Badge>}
+                {active.layer === "discuss" && <Badge variant="outline" className="text-[10px] border-blue-200 text-blue-700 bg-blue-50">Discussion</Badge>}
+                {active.searched && <Badge variant="outline" className="text-[10px] gap-1">🌐 Web</Badge>}
+                {active.streaming && (
+                  <span className="flex gap-0.5">
+                    {[0, 1, 2].map((i) => (
+                      <span key={i} className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground"
+                        style={{ animationDelay: `${i * 120}ms` }} />
+                    ))}
+                  </span>
+                )}
+              </div>
+              <p className="text-sm leading-relaxed whitespace-pre-wrap">{active.content}</p>
+            </div>
+          </div>
+
+          {/* Card footer: actions + navigation */}
+          <div className="flex items-center justify-between border-t px-4 py-2">
+            <div className="flex items-center gap-3">
+              {!active.streaming && active.layer === "surface" && (
+                <button
+                  onClick={() => onDepth(active.participant_id)}
+                  className="text-[11px] font-medium hover:underline transition-colors"
+                  style={{ color: t.color }}
+                  disabled={streaming}
+                >Go deeper →</button>
+              )}
+              <button
+                onClick={() => onKick(active.participant_id)}
+                className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
+              >Kick</button>
+            </div>
+
+            {msgs.length > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setIdx((i) => Math.max(0, i - 1))}
+                  disabled={idx === 0}
+                  className="rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                {/* Dot indicators */}
+                <div className="flex gap-1">
+                  {msgs.map((m, i) => (
+                    <button key={m.id} onClick={() => setIdx(i)}
+                      className={cn(
+                        "h-1.5 rounded-full transition-all",
+                        i === idx ? "w-4 bg-foreground" : "w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/60"
+                      )} />
+                  ))}
+                </div>
+                <button
+                  onClick={() => setIdx((i) => Math.min(msgs.length - 1, i + 1))}
+                  disabled={idx === msgs.length - 1}
+                  className="rounded p-1 text-muted-foreground hover:text-foreground disabled:opacity-30 transition-colors"
+                >
+                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* All models tab bar when > 1 response */}
+      {msgs.length > 1 && (
+        <div className="flex flex-wrap gap-1.5">
+          {msgs.map((m, i) => {
+            const mt = modelTheme(m.model_id)
+            return (
+              <button
+                key={m.id}
+                onClick={() => setIdx(i)}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
+                  i === idx
+                    ? "border-transparent text-white"
+                    : "border-border text-muted-foreground hover:border-foreground/30"
+                )}
+                style={i === idx ? { background: mt.color, borderColor: mt.color } : {}}
+              >
+                <span>{mt.initial}</span>
+                <span>{mt.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ── Main component ───────────────────────────────────────────────── */
 export function DiscussionRoom() {
   const { roomId } = useParams<{ roomId: string }>()
   const navigate = useNavigate()
@@ -34,7 +199,7 @@ export function DiscussionRoom() {
 
   useEffect(() => { getToken().then(setToken) }, [])
 
-  const { messages, streaming, send, requestDepth } = useDiscussion(roomId!, token)
+  const { messages, streaming, historyLoaded, send, requestDepth, requestDiscussion } = useDiscussion(roomId!, token)
 
   useEffect(() => {
     if (!roomId) return
@@ -58,6 +223,11 @@ export function DiscussionRoom() {
     setInput("")
   }
 
+  async function handleDismiss(participantId: string) {
+    const p = room?.participants.find((x) => x.id === participantId)
+    if (p) setDismissTarget({ id: p.id, name: p.display_name, modelId: p.model_id })
+  }
+
   async function confirmDismiss() {
     if (!dismissTarget || !roomId || !dismissReason) return
     const t = await getToken()
@@ -68,7 +238,7 @@ export function DiscussionRoom() {
         p.id === dismissTarget.id ? { ...p, dismissed: true, dismissal_reason: dismissReason } : p),
     } : prev)
     if (result.curator_suggestion) {
-      setCuratorBanner(`Curator suggests: ${result.curator_suggestion.model_id} — ${result.curator_suggestion.reason}`)
+      setCuratorBanner(`${result.curator_suggestion.model_id} — ${result.curator_suggestion.reason}`)
       setTimeout(() => setCuratorBanner(null), 10000)
     }
     setDismissTarget(null)
@@ -109,38 +279,37 @@ export function DiscussionRoom() {
     setShowEndModal(false)
   }
 
-  if (!room) return (
+  if (!room || !historyLoaded) return (
     <div className="flex h-screen items-center justify-center gap-2 text-muted-foreground">
-      <Spinner className="h-5 w-5" /><span className="text-sm">Loading room…</span>
+      <Spinner className="h-5 w-5" />
+      <span className="text-sm">{!room ? "Loading room…" : "Loading history…"}</span>
     </div>
   )
 
   if (ended) return (
     <div className="flex h-screen flex-col items-center justify-center gap-4 px-4 text-center">
       <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center text-2xl">✓</div>
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground mb-1">Discussion ended</p>
-        <p className="text-base font-semibold max-w-sm">"{room.question}"</p>
-      </div>
-      <Button onClick={() => navigate("/app")}>← Back to Discussions</Button>
+      <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Discussion ended</p>
+      <p className="text-base font-semibold max-w-sm">"{room.question}"</p>
+      <Button onClick={() => navigate("/app")}>← New Discussion</Button>
     </div>
   )
 
   const active = room.participants.filter((p) => !p.dismissed)
   const dismissed = room.participants.filter((p) => p.dismissed)
+  const turns = groupTurns(messages)
+  const lastTurn = turns[turns.length - 1]
+  void lastTurn
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
 
       {/* ── Sidebar ── */}
-      <aside className="flex w-56 shrink-0 flex-col border-r bg-muted/20">
+      <aside className="flex w-52 shrink-0 flex-col border-r bg-muted/20">
 
-        {/* Back nav */}
         <div className="flex items-center gap-2 border-b px-4 h-14">
-          <button
-            onClick={() => navigate("/app")}
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
+          <button onClick={() => navigate("/app")}
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
             </svg>
@@ -148,28 +317,27 @@ export function DiscussionRoom() {
           </button>
         </div>
 
-        {/* Topic */}
-        <div className="px-4 py-3 border-b">
+        <div className="border-b px-4 py-3">
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
             {room.category?.replace("_", " ") ?? "Discussion"}
           </p>
-          <p className="text-xs font-medium leading-relaxed line-clamp-4">"{room.question}"</p>
+          <p className="line-clamp-4 text-xs font-medium leading-relaxed">"{room.question}"</p>
         </div>
 
-        {/* Curator — always shown */}
-        <div className="px-4 py-3 border-b">
+        {/* Curator */}
+        <div className="border-b px-4 py-3">
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Curator</p>
-          <div className="flex items-center gap-2 rounded-lg bg-card border px-3 py-2">
+          <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
             <ModelAvatar modelId="curator" size="sm" />
-            <div>
+            <div className="min-w-0">
               <p className="text-xs font-medium">Curator</p>
-              <p className="text-[10px] text-muted-foreground">Moderates · Adapts</p>
+              <p className="text-[10px] text-muted-foreground leading-tight">Moderates · Rates</p>
             </div>
-            <span className="ml-auto h-1.5 w-1.5 rounded-full bg-green-500" />
+            <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-green-500" />
           </div>
         </div>
 
-        {/* Active models */}
+        {/* Panelists */}
         <ScrollArea className="flex-1 px-4 py-3">
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
             Panelists ({active.length})
@@ -178,16 +346,13 @@ export function DiscussionRoom() {
             {active.map((p) => {
               const t = modelTheme(p.model_id)
               return (
-                <div key={p.id}
-                  className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2"
-                >
+                <div key={p.id} className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2">
                   <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-green-500" />
                   <span className="min-w-0 flex-1 truncate text-xs font-medium" style={{ color: t.color }}>{t.label}</span>
-                  {/* Dismiss button — always visible */}
                   <button
                     title="Kick from room"
                     onClick={() => setDismissTarget({ id: p.id, name: p.display_name, modelId: p.model_id })}
-                    className="shrink-0 rounded p-0.5 text-muted-foreground/50 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                    className="shrink-0 rounded p-0.5 text-muted-foreground/40 hover:bg-destructive/10 hover:text-destructive transition-colors"
                   >
                     <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -204,23 +369,18 @@ export function DiscussionRoom() {
               <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/50">
                 Kicked ({dismissed.length})
               </p>
-              <div className="space-y-1">
-                {dismissed.map((p) => (
-                  <div key={p.id} className="flex items-center gap-2 px-2 py-1 opacity-40">
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground" />
-                    <span className="truncate text-xs line-through text-muted-foreground">{modelTheme(p.model_id).label}</span>
-                  </div>
-                ))}
-              </div>
+              {dismissed.map((p) => (
+                <div key={p.id} className="flex items-center gap-2 px-1 py-1 opacity-40">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground" />
+                  <span className="truncate text-xs line-through text-muted-foreground">{modelTheme(p.model_id).label}</span>
+                </div>
+              ))}
             </>
           )}
         </ScrollArea>
 
-        {/* Actions */}
         <div className="space-y-1.5 border-t p-3">
-          <Button variant="secondary" size="sm" className="w-full" onClick={openPicker}>
-            + Add Model
-          </Button>
+          <Button variant="secondary" size="sm" className="w-full" onClick={openPicker}>+ Add Model</Button>
           <Button variant="outline" size="sm"
             className="w-full border-destructive/30 text-destructive hover:bg-destructive hover:text-white hover:border-destructive"
             onClick={() => setShowEndModal(true)}>
@@ -250,107 +410,123 @@ export function DiscussionRoom() {
 
         {/* Thread */}
         <div ref={threadRef} className="flex-1 overflow-y-auto">
-          <div className="mx-auto max-w-3xl px-6 py-6 space-y-5">
-            {messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
-                <div className="flex items-center gap-2">
-                  <ModelAvatar modelId="curator" size="md" />
-                  {active.slice(0, 3).map((p) => <ModelAvatar key={p.id} modelId={p.model_id} size="md" />)}
-                  {active.length > 3 && <span className="text-sm text-muted-foreground">+{active.length - 3}</span>}
-                </div>
-                <div>
-                  <p className="font-semibold text-sm">
-                    Curator + {active.map((p) => modelTheme(p.model_id).label).join(", ")} are ready.
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Send your first message. The Curator will coordinate responses.
-                  </p>
-                </div>
-              </div>
-            )}
+          <div className="mx-auto max-w-2xl px-6 py-6 space-y-8">
 
-            {messages.map((msg) => {
-
-              /* User message */
-              if (msg.layer === "user") return (
-                <div key={msg.id} className="flex justify-end">
-                  <div className="max-w-lg rounded-2xl rounded-tr-sm bg-primary px-4 py-3">
-                    <p className="text-sm text-primary-foreground whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+            {!historyLoaded || (historyLoaded && messages.length === 0 && !streaming) ? (
+              historyLoaded ? (
+                <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
+                  <div className="flex items-center gap-2">
+                    <ModelAvatar modelId="curator" size="md" />
+                    {active.slice(0, 3).map((p) => <ModelAvatar key={p.id} modelId={p.model_id} size="md" />)}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm">
+                      Curator + {active.map((p) => modelTheme(p.model_id).label).join(", ")} are ready.
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">Send a message to start the discussion.</p>
                   </div>
                 </div>
-              )
-
-              /* Curator message — distinct amber styling */
-              if (msg.layer === "curator") return (
-                <div key={msg.id} className="flex gap-3">
-                  <ModelAvatar modelId="curator" size="sm" />
-                  <div className="max-w-2xl flex-1">
-                    <div className="mb-1.5 flex items-center gap-2">
-                      <ModelTag modelId="curator" />
-                      <span className="text-[11px] text-muted-foreground">Moderator</span>
-                    </div>
-                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-                      <p className="text-sm italic leading-relaxed text-amber-900 whitespace-pre-wrap">{msg.content}</p>
-                    </div>
-                  </div>
+              ) : (
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => <Skeleton key={i} className="h-32 w-full rounded-xl" />)}
                 </div>
               )
+            ) : (
+              turns.map((turn, ti) => {
+                const isLastTurn = ti === turns.length - 1
+                const turnStreaming = isLastTurn && streaming
+                const turnComplete = !turnStreaming && turn.modelMsgs.length > 0
 
-              /* AI model message */
-              const t = modelTheme(msg.model_id)
-              return (
-                <div key={msg.id} className="group flex gap-3">
-                  <ModelAvatar modelId={msg.model_id} size="sm" />
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-1.5 flex items-center gap-2 flex-wrap">
-                      <ModelTag modelId={msg.model_id} />
-                      {msg.layer === "depth" && (
-                        <Badge variant="secondary" className="text-[10px]">Deep dive</Badge>
-                      )}
-                      {msg.searched && (
-                        <Badge variant="outline" className="text-[10px] gap-1">🌐 Web</Badge>
-                      )}
-                      {msg.streaming && (
-                        <span className="flex gap-0.5 items-center">
-                          {[0, 1, 2].map((i) => (
-                            <span key={i} className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground"
-                              style={{ animationDelay: `${i * 120}ms` }} />
-                          ))}
-                        </span>
-                      )}
+                return (
+                  <div key={turn.id} className="space-y-3">
+                    {/* Round badge */}
+                    <div className="flex items-center gap-3">
+                      <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+                        Round {ti + 1}
+                      </span>
+                      <div className="flex-1 h-px bg-border/50" />
                     </div>
-                    <div className="rounded-xl border bg-card px-4 py-3 shadow-xs">
-                      <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                    </div>
-                    {/* Actions under message */}
-                    {!msg.streaming && (
-                      <div className="mt-1.5 flex items-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {msg.layer === "surface" && (
-                          <button
-                            onClick={() => requestDepth(msg.participant_id, displayNames)}
-                            className="text-[11px] font-medium hover:underline"
-                            style={{ color: t.color }}
-                          >Go deeper →</button>
+
+                    {/* User message */}
+                    <div className="flex justify-end">
+                      <div className={cn(
+                        "max-w-lg rounded-2xl rounded-tr-sm px-4 py-3",
+                        turn.userMsg.content.startsWith("[Discussion Round]")
+                          ? "bg-blue-600"
+                          : "bg-primary"
+                      )}>
+                        {turn.userMsg.content.startsWith("[Discussion Round]") ? (
+                          <p className="text-xs text-blue-100 font-medium">🔄 Let them discuss</p>
+                        ) : (
+                          <p className="text-sm text-primary-foreground whitespace-pre-wrap leading-relaxed">
+                            {turn.userMsg.content}
+                          </p>
                         )}
-                        <button
-                          onClick={() => {
-                            const p = room.participants.find((x) => x.id === msg.participant_id)
-                            if (p) setDismissTarget({ id: p.id, name: p.display_name, modelId: p.model_id })
-                          }}
-                          className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
-                        >Kick from room</button>
+                      </div>
+                    </div>
+
+                    {/* Curator intro messages */}
+                    {turn.curatorMsgs.map((msg) => (
+                      <div key={msg.id} className="flex gap-3">
+                        <ModelAvatar modelId="curator" size="sm" />
+                        <div className="max-w-lg flex-1">
+                          <div className="mb-1.5 flex items-center gap-2">
+                            <ModelTag modelId="curator" />
+                            <span className="text-[11px] text-muted-foreground">Moderator</span>
+                          </div>
+                          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                            <p className="text-sm italic leading-relaxed text-amber-900 whitespace-pre-wrap">{msg.content}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Model responses — stacked cards */}
+                    {(turn.modelMsgs.length > 0 || turnStreaming) && (
+                      <ResponseStack
+                        msgs={turn.modelMsgs}
+                        streaming={turnStreaming}
+                        onDepth={(pid) => requestDepth(pid, displayNames)}
+                                        onKick={handleDismiss}
+                      />
+                    )}
+
+                    {/* Streaming placeholder */}
+                    {turnStreaming && turn.modelMsgs.length === 0 && (
+                      <div className="rounded-xl border bg-card p-5">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Spinner className="h-4 w-4" />
+                          <span>Models are responding…</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Post-turn actions (only on completed turns) */}
+                    {turnComplete && isLastTurn && (
+                      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed bg-muted/20 px-4 py-3">
+                        <p className="text-xs text-muted-foreground mr-1">What next?</p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs gap-1.5"
+                          disabled={streaming}
+                          onClick={() => requestDiscussion(turn.modelMsgs, displayNames)}
+                        >
+                          🔄 Let them discuss
+                        </Button>
+                        <span className="text-muted-foreground/40 text-xs">or type a follow-up below</span>
                       </div>
                     )}
                   </div>
-                </div>
-              )
-            })}
+                )
+              })
+            )}
           </div>
         </div>
 
-        {/* Input */}
+        {/* Input bar */}
         <div className="border-t bg-background px-6 py-4">
-          <div className="mx-auto flex max-w-3xl items-end gap-3">
+          <div className="mx-auto flex max-w-2xl items-end gap-3">
             <Textarea
               rows={2}
               className="flex-1 resize-none text-sm"
@@ -420,7 +596,6 @@ export function DiscussionRoom() {
                     <ModelAvatar modelId={m.model_id} size="sm" />
                     <span className="flex-1 text-sm font-medium" style={{ color: t.color }}>{t.label}</span>
                     <div className="w-20"><ScoreBar score={m.score} /></div>
-                    <span className="text-xs text-muted-foreground">{Math.round(m.score * 100)}</span>
                   </div>
                 )
               })}
@@ -429,7 +604,7 @@ export function DiscussionRoom() {
         </Overlay>
       )}
 
-      {/* ── End discussion modal ── */}
+      {/* ── End modal ── */}
       {showEndModal && (
         <Overlay onClose={() => setShowEndModal(false)}>
           <p className="font-semibold mb-1">End Discussion</p>
@@ -438,9 +613,7 @@ export function DiscussionRoom() {
             {[1, 2, 3, 4, 5].map((s) => (
               <button key={s} onClick={() => setRating(s)}
                 className={cn("text-3xl leading-none transition-all hover:scale-110",
-                  rating >= s ? "text-amber-400" : "text-muted-foreground/25 hover:text-muted-foreground/50")}>
-                ★
-              </button>
+                  rating >= s ? "text-amber-400" : "text-muted-foreground/25 hover:text-muted-foreground/50")}>★</button>
             ))}
           </div>
           <div className="flex justify-end gap-2">
